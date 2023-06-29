@@ -82,7 +82,7 @@ WHERE
     AND sa.comp_prvd_num in ('01','04','97','98')
     --Individual policies
     AND po.sex_code in ('F', 'M')
-	AND	cvg.xpry_dt between '2023-07-01' and '2023-09-30'
+	AND	cvg.xpry_dt between '2023-07-01' and '2023-09-30' -- Select policies maturing from Jul-Sep'23
 ; 
 
 
