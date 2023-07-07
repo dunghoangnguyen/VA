@@ -9,11 +9,8 @@ from datetime import datetime, timedelta
 import calendar
 
 # Declare all variables here and make changes where applicable
-#rpt_yr = 2023
-#lmth = -1
-#llmth = -2
-#rpt_mth = 2305
-#rpt_prv_mth = 2304
+lmth = -1
+llmth = -2
 exclusion_list_sub = ['MI007', 'PA007', 'PA008']
 active_sts = ['1', '2', '3', '5']
 exclusion_list_full = ['MI007', 'PA007', 'PA008', 'EV001', 'EV002', 'EV003', 'EV004', 'EV005', 'EV006', 'EV007', 'EV008', 'EV009', 'EV010', 'EV011', 'EV012', 'EV013', 'EV014', 'EV015', 'EV016', 'EV017', 'EV018', 'EV019', 'EV101', 'EV102', 'EV103', 'EV104', 'EV105', 'EV201', 'EV202', 'EV203', 'EVS01', 'EVS02', 'EVS03', 'EVS04', 'EVS05','FC103','FC208','FD101','FD102','FD103','FD104','FD105','FD106','FD107','FD108','FD109','FD204','FD205','FD206','FD207','FD208','FD209','FD210','FD211','FD212','FD213','FD214','FS101','FS102','FS103','FS104','FS105','FS106','FS107','FS108','FS109','FS205','FS206','FS207','FS208','FS209','FS210','FS211','FS212','FS213','FS214','FC101','FC102','FC104','FC105','FC106','FC107','FC108','FC109','FC206','FC207','FC209','FC210','FC211','FC212','FC213','FC214','VEH10','VEU14','VEP18','FC205','FS204','FC204','EVX03','FD203','FS203','FC203','FD202','FS202','FC202','VEDCL','VEDEN']
@@ -23,9 +20,8 @@ p_shopee_vc = "SHOPEEVC"
 prm_eclaim_codes = ['03' ,'07' ,'11' ,'27']
 
 # Get the last month-end from current system date
-#last_mthend = datetime.strftime(datetime.now().replace(day=1) - timedelta(days=1), '%Y-%m-%d')
 
-x = 1 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
+x = 0 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
 today = datetime.now()
 first_day_of_current_month = today.replace(day=1)
 current_month = first_day_of_current_month
@@ -37,8 +33,11 @@ for i in range(x):
 
 last_day_of_x_months_ago = current_month - timedelta(days=1)
 last_mthend = last_day_of_x_months_ago.strftime('%Y-%m-%d')
+rpt_yr = last_mthend[0:4]
 rpt_mth = last_mthend[2:4]+last_mthend[5:7]
-print("Selected last_mthend =", last_mthend)
+print("last_mthend =", last_mthend)
+print("rpt_yr =", rpt_yr)
+print("rpt_mth =", rpt_mth)
 
 # COMMAND ----------
 
@@ -95,18 +94,18 @@ tcustdm_mthend_df = tcustdm_mthend_df.filter(col("image_date") == last_mthend)
 tagtdm_mthend_df = tagtdm_mthend_df.filter(col("image_date") == last_mthend)
 tporidm_mthend_df = tporidm_mthend_df.filter(col("image_date") == last_mthend)
 
-print("Number of records in tpos_collection: ", tpos_collection_df.count())
-print("Number of records in tclaims_conso_all: ", tclaims_conso_all_df.count())
-print("Number of records in tpolicys: ", tpolicys_df.count())
-print("Number of records in tclient_policy_links: ", tclient_policy_links_df.count())
-print("Number of records in tclient_details: ", tclient_details_df.count())
+print("Number of records in tpos_collection: ", tpos_collection_df.filter(col("image_date") == last_mthend).count())
+#print("Number of records in tclaims_conso_all: ", tclaims_conso_all_df.count())
+#print("Number of records in tpolicys: ", tpolicys_df.count())
+#print("Number of records in tclient_policy_links: ", tclient_policy_links_df.count())
+#print("Number of records in tclient_details: ", tclient_details_df.count())
 print("Number of records in tpolidm_mthend: ", tpolidm_mthend_df.count())
 print("Number of records in tcustdm_mthend: ", tcustdm_mthend_df.count())
 print("Number of records in tagtdm_mthend: ", tagtdm_mthend_df.count())
 print("Number of records in tporidm_mthend: ", tporidm_mthend_df.count())
-print("Number of records in vn_plan_code_map: ", vn_plan_code_map_df.count())
-print("Number of records in tclaim_quota_edit_df: ", tclaim_quota_edit_df.count())
-print("Number of records in tcoverages_df: ", tcoverages_df.count())
+#print("Number of records in vn_plan_code_map: ", vn_plan_code_map_df.count())
+#print("Number of records in tclaim_quota_edit_df: ", tclaim_quota_edit_df.count())
+#print("Number of records in tcoverages_df: ", tcoverages_df.count())
 
 # COMMAND ----------
 
@@ -119,7 +118,7 @@ cash_noncash_details = tpos_collection_df.filter(col("image_date") == last_mthen
         when(substring(col("payment_method"), 1, 4) == "CASH", "N").otherwise("Y").alias("onl_ind"),
         col("client_number").alias("cli_num")
 )
-print("Number of records in cash_noncash_details:", cash_noncash_details.count())
+#print("Number of records in cash_noncash_details:", cash_noncash_details.count())
 
 # Summarize all non-cash transactions by customer
 cash_noncash_cus_summary = cash_noncash_details \
@@ -130,7 +129,7 @@ cash_noncash_cus_summary = cash_noncash_details \
             sum(col("trxn_amt")).alias("txn_amt"),
             sum(when(col("onl_ind") == "Y", col("trxn_amt"))).alias("onl_txn_amt")) \
     .orderBy(col("po_num"))
-print("Number of records in cash_noncash_cus_summary:", cash_noncash_cus_summary.count())
+#print("Number of records in cash_noncash_cus_summary:", cash_noncash_cus_summary.count())
 
 # Summarize all non-cash transactions by reporting month
 cash_noncash_summary = cash_noncash_details \
@@ -149,7 +148,7 @@ digital_payment = tpos_collection_df.filter(
             .agg(
                 max(col('transaction_date')).alias('lst_trxn'))
             
-print("Number of records in digital_payment:", digital_payment.count())
+#print("Number of records in digital_payment:", digital_payment.count())
 
 # COMMAND ----------
 
@@ -174,7 +173,7 @@ claim = tclaims_conso_all_df.join(
         when(tclaims_conso_all_df['source_code'] == 'EZC', 'Y').otherwise('N')
     ).alias('clm_ezc_ind')
 )
-print("Number of records in claim:", claim.count())
+#print("Number of records in claim:", claim.count())
 
 # All claim online submissions
 digital_claim = tclaims_conso_all_df.join(
@@ -192,7 +191,7 @@ digital_claim = tclaims_conso_all_df.join(
 ).groupBy(tclient_policy_links_df['cli_num']).agg(
     max(tclaims_conso_all_df['claim_received_date']).alias('lst_trxn')
 )
-print("Number of records in digital_claim:", digital_claim.count())
+#print("Number of records in digital_claim:", digital_claim.count())
 
 # COMMAND ----------
 
@@ -260,7 +259,7 @@ cseg = seg.groupBy(col("client_number").alias("cli_num")).agg(
     otherwise("Undefined Segmentation").alias("segment_type"),
     col("max_no_dpnd")
 )
-print("Number of records in cseg:", cseg.count())
+#print("Number of records in cseg:", cseg.count())
 
 # BACKUP
 tinstdm_mthend = tclient_details_df.join(
@@ -272,7 +271,7 @@ tinstdm_mthend = tclient_details_df.join(
     tclient_details_df["cli_num"],
     floor(months_between(lit(last_mthend), tclient_details_df["birth_dt"]) / 12).alias("cur_age")
 ).distinct()
-print("Number of records in tinstdm_mthend:", tinstdm_mthend.count())
+#print("Number of records in tinstdm_mthend:", tinstdm_mthend.count())
 
 
 # COMMAND ----------
@@ -289,7 +288,7 @@ vn_plan_code_map_dedup = vn_plan_code_map_df.join(
     vn_plan_code_map_latest,
     on=["effective_date", "plan_code", "cvg_typ"]
 ).select(vn_plan_code_map_df["*"])
-print("Number of records in vn_plan_code_map_dedup:", vn_plan_code_map_dedup.count())
+#print("Number of records in vn_plan_code_map:", vn_plan_code_map_dedup.count())
 
 
 # COMMAND ----------
@@ -299,85 +298,91 @@ print("Number of records in vn_plan_code_map_dedup:", vn_plan_code_map_dedup.cou
 
 # COMMAND ----------
 
+tpolidm_mthend_df.createOrReplaceTempView("tpolidm_mthend")
+tagtdm_mthend_df.createOrReplaceTempView("tagtdm_mthend")
+tcustdm_mthend_df.createOrReplaceTempView("tcustdm_mthend")
+vn_plan_code_map_dedup.createOrReplaceTempView("vn_plan_code_map_dedup")
 # Policy base
-policy_base = tpolidm_mthend_df.alias("pol")\
-    .join(tagtdm_mthend_df.alias("agt"), 
-          (col("pol.wa_code") == col("agt.agt_code")) & 
-          (col("pol.image_date") == col("agt.image_date")), "left_outer")\
-    .join(tcustdm_mthend_df.alias("cus"), 
-          (col("pol.po_num") == col("cus.cli_num")) & 
-          (col("pol.image_date") == col("cus.image_date")), "left_outer")\
-    .join(vn_plan_code_map_dedup.alias("pln"), 
-          col("pol.plan_code") == col("pln.plan_code"), "left_outer")\
-    .where((col("pol.pol_eff_dt") <= last_mthend) & col("pol.pol_stat_cd").isin(active_sts) & 
-           ~col("pol.plan_code").isin(exclusion_list_sub) & (col("pol.image_date") == last_mthend))\
-    .selectExpr(
-        "pol.pol_num",
-        "pol.plan_code",
-        "pol.po_num",
-        "pol.insrd_num",
-        """case
-            when agt.loc_cd is null then (case
-                when dist_chnl_cd in ('03','10','14','16','17','18','19','22','23','24','25','29','30','31','32','33','39','41','44','47','88','49','51','52','53','58') then 'Banca'
-                when dist_chnl_cd in ('48') then 'Affinity'
-                when dist_chnl_cd in ('01', '02', '08', '50', '*') then 'Agency'
-                when dist_chnl_cd in ('05','06','07','34','36','35') then 'DMTM'
-                when dist_chnl_cd in ('09') then 'MI'
-                else 'Unknown'
-            end)
-            when dist_chnl_cd in ('*') then 'Agency'
-            else nvl(agt.channel,'Unknown')
-        end as Channel""",
-        "cus.frst_join_dt as frst_iss_dt",
-        "pol.pol_iss_dt",
-        "pol.pol_eff_dt",
-        "agt.agt_code",
-        "agt.loc_cd as loc_code_agt",
-        f"""case when months_between(to_timestamp({last_mthend}),cus.frst_join_dt) < 3 then 'New Customer' else 'Existing Customer' end as customer_type""",
-        "cus.sex_code as gender",
-        "cus.birth_dt",
-        """floor(months_between(nvl(pol.frst_iss_dt,pol.pol_iss_dt),cus.birth_dt) / 12) as age_frst_iss""",
-        "cus.cur_age as age_curr",
-        """case when cus.mobl_phon_num is null then 'N' else 'Y' end as mobile_contact""",
-        """case when cus.email_addr is null then 'N' else 'Y' end as email_contact""",
-        "cus.occp_code",
-        "cus.mthly_incm",
-        "cus.addr_typ",
-        "cus.full_address",
-        "cus.city",
-        f"""floor(months_between(cus.image_date,cus.frst_join_dt) /12) as tenure""",
-        f"""floor(months_between(pol.image_date,pol.pol_iss_dt)) as pol_tenure""",
-        "'INFORCE' as cus_status",
-        "pol.pol_trmn_dt as lst_pol_trmn_dt",
-        """case when cus.cws_acct_id is not null then 'Y' else 'N' end cws_reg""",
-        "pol.tot_ape",
-        """case
-            when agt.loc_cd is null then (case
-                when dist_chnl_cd in ('03','10','14','16','17','18','19','22','23','24','25','29','30','31','32','33','39','41','44','47','88','49','51','52','53','58') then round(pol.tot_ape*pln.nbv_margin_banca_other_banks,2) -- 'Banca'
-                when dist_chnl_cd in ('48') then round(pol.tot_ape*pln.nbv_margin_other_channel_affinity,2)--'Affinity'
-                when dist_chnl_cd in ('01','02','08','50','*') then round(pol.tot_ape*pln.nbv_margin_agency,2)--'Agency'
-                when dist_chnl_cd in ('05','06','07','34','36','35') then round(pol.tot_ape*pln.nbv_margin_dmtm,2)--'DMTM'
-                when dist_chnl_cd in ('09') then round(pol.tot_ape*-1.34041044648343,2)
-                else round(pol.tot_ape*pln.nbv_margin_other_channel,2)
-            end)
-            when dist_chnl_cd in ('*') then round(pol.tot_ape*pln.nbv_margin_agency,2)
-            when agt.loc_cd like 'TCB%' then round(pol.tot_ape*pln.nbv_margin_banca_tcb,2)
-            when agt.loc_cd like 'SAG%' then round(pol.tot_ape*pln.nbv_margin_banca_scb,2)
-            else round(pol.tot_ape*pln.nbv_margin_other_channel,2)
-        end as nbv""",
-        "cus.sms_ind",
-        "cus.mobl_phon_num"
-    )\
-    .distinct()\
-    .orderBy("pol.pol_num", "frst_iss_dt")
-print("Number of records in policy_base:", policy_base.count())
-policy_base.display(10)
+policy_base = spark.sql(f"""
+select distinct	
+	pol.pol_num
+	,pol.plan_code
+	,pol.po_num
+	,pol.insrd_num
+	,case
+		when agt.loc_cd is null then (case
+										when dist_chnl_cd in ('03','10','14','16','17','18','19','22','23','24','25','29','30','31','32','33','39','41','44','47','88','49','51','52','53','58') then 'Banca'
+										when dist_chnl_cd in ('48') then 'Affinity'
+										when dist_chnl_cd in ('01', '02', '08', '50', '*') then 'Agency'
+										when dist_chnl_cd in ('05','06','07','34','36','35') then 'DMTM'
+										when dist_chnl_cd in ('09') then 'MI'
+										else 'Unknown'
+									end)
+		when dist_chnl_cd in ('*') then 'Agency'
+		else
+			nvl(agt.channel,'Unknown')
+	end as Channel
+	,cus.frst_join_dt as frst_iss_dt
+	,pol.pol_iss_dt
+	,pol.pol_eff_dt
+	,agt.agt_code
+	,agt.loc_cd as loc_code_agt 
+	,case when months_between('{last_mthend}',cus.frst_join_dt) < 3 then 'New Customer' else 'Existing Customer' end as customer_type
+	,cus.sex_code as gender
+	,cus.birth_dt         
+	,floor(months_between(nvl(pol.frst_iss_dt,pol.pol_iss_dt),cus.birth_dt) / 12) as age_frst_iss
+	,cus.cur_age as age_curr
+	,case when cus.mobl_phon_num is null then 'N' else 'Y' end as mobile_contact
+	,case when cus.email_addr is null then 'N' else 'Y' end as email_contact
+	,cus.occp_code
+	,cus.mthly_incm
+	,cus.addr_typ
+	,cus.full_address
+	,cus.city
+	,floor(months_between('{last_mthend}', cus.frst_join_dt) /12) as tenure
+	,floor(months_between('{last_mthend}', pol.pol_iss_dt)) as pol_tenure
+	,'INFORCE' as cus_status
+	,pol.pol_trmn_dt as lst_pol_trmn_dt
+	,case when cus.cws_acct_id is not null then 'Y' else 'N' end cws_reg   -- Amended on 05Aug19
+	,pol.tot_ape
+	,case
+		when agt.loc_cd is null then (case
+										when dist_chnl_cd in ('03','10','14','16','17','18','19','22','23','24','25','29','30','31','32','33','39','41','44','47','88','49','51','52','53','58') then round(pol.tot_ape*pln.nbv_margin_banca_other_banks,2) -- 'Banca'
+										when dist_chnl_cd in ('48') then round(pol.tot_ape*pln.nbv_margin_other_channel_affinity,2)--'Affinity'
+										when dist_chnl_cd in ('01','02','08','50','*') then round(pol.tot_ape*pln.nbv_margin_agency,2)--'Agency'
+										when dist_chnl_cd in ('05','06','07','34','36','35') then round(pol.tot_ape*pln.nbv_margin_dmtm,2)--'DMTM'
+										when dist_chnl_cd in ('09') then round(pol.tot_ape*-1.34041044648343,2)--'MI'
+										else round(pol.tot_ape*pln.nbv_margin_other_channel,2)
+									end) --'Unknown'
+		when dist_chnl_cd in ('*') then round(pol.tot_ape*pln.nbv_margin_agency,2)--'Agency'
+		when agt.loc_cd like 'TCB%' then round(pol.tot_ape*pln.nbv_margin_banca_tcb,2) --'TCB'
+		when agt.loc_cd like 'SAG%' then round(pol.tot_ape*pln.nbv_margin_banca_scb,2) --'SCB'
+		else round(pol.tot_ape*pln.nbv_margin_other_channel,2)
+	end as NBV --'Unknown'
+	,cus.sms_ind
+	-- 2022-06-09
+	,cus.mobl_phon_num
+from
+	tpolidm_mthend pol
+	left join tagtdm_mthend  agt on (pol.wa_code = agt.agt_code and pol.image_date=agt.image_date)
+    left join tcustdm_mthend cus on (pol.po_num = cus.cli_num and pol.image_date = cus.image_date)
+    left join vn_plan_code_map_dedup pln on (pol.plan_code = pln.plan_code)	
+where
+	pol.pol_eff_dt <= '{last_mthend}'
+	and pol.pol_stat_cd in ('1','2','3','5')
+	and pol.plan_code not in ('MI007','PA007','PA008')
+	and pol.image_date = '{last_mthend}'
+order by pol.pol_num,frst_iss_dt                     
+""")
+policy_base = policy_base.toDF(*[col.lower() for col in policy_base.columns])
+#print("Number of records in policy_base:", policy_base.count())
+#policy_base.display(10)
 
 # COMMAND ----------
 
 # Product table details
 product_table = tporidm_mthend_df \
-    .join(policy_base, on=['pol_num'], how='inner') \
+    .join(policy_base, on=['pol_num'], how='left') \
     .join(vn_plan_code_map_dedup, on=['plan_code'], how='left') \
     .where(
         (~tporidm_mthend_df.plan_code.isin(exclusion_list_sub)) &
@@ -408,8 +413,8 @@ product_table = tporidm_mthend_df \
         policy_base.pol_tenure
     ) \
     .orderBy('po_num', 'pol_num')
-print("Number of records in product_table:", product_table.count())
-product_table.display(10)
+#print("Number of records in product_table:", product_table.count())
+#product_table.display(10)
 
 # COMMAND ----------
 
@@ -428,7 +433,8 @@ product_table_summary = product_table \
         when(sum('prod_med') > 0, 1).otherwise(0).alias('need_med')
     ) \
     .orderBy('po_num')
-print("Number of records in product_table_summary:", product_table_summary.count())
+#print("Number of records in product_table_summary:", product_table_summary.count())
+
 product_table_summary_mtd = product_table \
     .where(product_table.pol_tenure == 0) \
     .groupBy('po_num') \
@@ -444,8 +450,8 @@ product_table_summary_mtd = product_table \
         when(sum('prod_med') > 0, 1).otherwise(0).alias('need_med')
     ) \
     .orderBy('po_num')
-print("Number of records in product_table_summary_mtd:", product_table_summary_mtd.count())
-product_table_summary_mtd.display(10)
+#print("Number of records in product_table_summary_mtd:", product_table_summary_mtd.count())
+#product_table_summary_mtd.display(10)
 
 # COMMAND ----------
 
@@ -522,8 +528,8 @@ customer_base_all = customer_table.alias('ct') \
         'cbd.agt_code',
         'cbd.loc_code_agt'
     )
-print("Number of records in customer_base_all:", customer_base_all.count())
-customer_base_all.display(10)
+#print("Number of records in customer_base_all:", customer_base_all.count())
+#customer_base_all.display(10)
 
 # COMMAND ----------
 
@@ -616,8 +622,201 @@ customer_table_final = customer_base_all.alias("a") \
         "a.sms_ind",
         "a.mobl_phon_num"
     ).distinct()
-print("Number of records in customer_table_final:", customer_table_final.count())
-customer_table_final.display(10)
+#print("Number of records in customer_table_final:", customer_table_final.count())
+#customer_table_final.display(10)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong>Create extra tables</strong>
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Attrition tables
+
+# COMMAND ----------
+
+# Identify customers without an active policy
+att_cus = tpolidm_mthend_df.alias("pol") \
+    .join(
+        tporidm_mthend_df.alias("cvg"),
+        on=[
+            col("pol.pol_num") == col("cvg.pol_num"),
+            col("pol.plan_code") == col("cvg.plan_code"),
+            col("pol.image_date") == col("cvg.image_date")
+        ],
+        how="inner"
+    ) \
+    .where(
+        (col("pol.image_date") == last_mthend) &
+        (col("cvg.cvg_typ") == "B") &
+        (~col("pol.plan_code").isin(exclusion_list_sub)) &
+        (~col("pol.pol_stat_cd").isin(active_sts)) &
+        (col("pol.pol_stat_cd") != "N") &
+        (
+            (
+                col("pol.pol_trmn_dt").isNotNull() &
+                (col("pol.pol_trmn_dt") <= last_mthend)
+            ) |
+            (
+                col("cvg.xpry_dt").isNotNull() &
+                (col("cvg.xpry_dt") <= last_mthend)
+            )
+        )
+    ) \
+    .groupBy(col("pol.po_num")) \
+    .agg(
+        max(when(col("pol.pol_trmn_dt").isNull(), col("cvg.xpry_dt")).otherwise(col("pol.pol_trmn_dt"))).alias("pol_trmn_dt")
+    ) \
+    .orderBy(col("pol.po_num"))
+
+tpolidm_mthend_df.createOrReplaceTempView("tpolidm_mthend")
+tporidm_mthend_df.createOrReplaceTempView("tporidm_mthend")
+att_cus.createOrReplaceTempView("att_cus")
+
+att_reason = spark.sql(f"""
+select
+	a.po_num	
+	,a.pol_trmn_dt
+	,a.att_reason
+	,a.prod_cnt
+from
+	(select
+		att.po_num		
+		,att.pol_trmn_dt
+		,pol.stat_cd
+		,case pol.stat_cd
+			when 'B' then 'Lapsed'
+			when 'E' then 'Surrendered'			
+			when 'F' then 'Matured'
+			when 'H' then 'Matured'
+			when 'D' then 'Paid'
+			when 'M' then 'Paid'
+			when 'T' then 'Paid'
+			when 'C' then 'Others'
+			when 'L' then 'Others'
+			when 'N' then 'Others'
+			when 'R' then 'Others'
+			when 'X' then 'Others'
+		end as att_reason
+		,pol.prod_cnt
+		,row_number() over (partition by att.po_num order by pol.trmn_dt desc) as rn
+	from
+		att_cus att left join
+		(select
+			a.po_num				
+			,nvl(a.pol_stat_cd,b.cvg_stat_cd) stat_cd
+			,nvl(a.pol_trmn_dt,b.xpry_dt) trmn_dt		
+			,count(b.pol_num) prod_cnt
+		from
+			tpolidm_mthend	a
+			inner join tporidm_mthend b on (a.pol_num = b.pol_num and a.plan_code = b.plan_code and a.image_date = b.image_date)
+		where  
+			a.image_date = '{last_mthend}'
+		group by
+			a.po_num				
+			,nvl(a.pol_stat_cd,b.cvg_stat_cd)
+			,nvl(a.pol_trmn_dt,b.xpry_dt)
+		) pol on (att.po_num = pol.po_num and att.pol_trmn_dt = pol.trmn_dt)			
+	where
+		pol.trmn_dt is not null
+   ) a
+where	a.rn = 1   
+    and a.att_reason <> ''                    
+""")
+
+act_cus = tporidm_mthend_df.alias("pol") \
+    .where(
+        col("pol.cvg_stat_cd").isin(active_sts) &
+        (
+            col("pol.xpry_dt").isNull() |
+            (col("pol.xpry_dt") > last_mthend)
+        ) &
+        (col("image_date") == last_mthend)
+    ) \
+    .groupBy(col("pol.insrd_num")) \
+    .agg(
+        col("pol.insrd_num").alias("po_num")
+    ) \
+    .orderBy(col("po_num"))
+
+customer_table_final.createOrReplaceTempView("customer_table_final")
+att_reason.createOrReplaceTempView("att_reason")
+
+att_cus_final = spark.sql(f"""
+select 
+	a.*
+	,c.att_reason
+	,c.prod_cnt
+from
+	att_cus a left join 
+	customer_table_final b on (a.po_num = b.po_num)left join 
+	att_reason c on (a.po_num = c.po_num)
+where
+	b.po_num is null
+	and	c.att_reason is not null                       
+""")
+#print("att_cus:", att_cus.count())
+#print("act_cus:", act_cus.count())
+#print("att_cus_final:", att_cus_final.count())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC New customers
+
+# COMMAND ----------
+
+cuslist_yr = tpolidm_mthend_df \
+    .where(
+        ~col("plan_code").isin(exclusion_list_sub) &
+        (year(col("pol_eff_dt")) < rpt_yr) &
+        (col("image_date") == last_mthend)
+    ) \
+    .select(col("po_num")) \
+    .distinct()
+
+newcustomer_mth = tpolidm_mthend_df.alias("a") \
+    .join(
+        cuslist_yr.alias("b"),
+        on=col("a.po_num") == col("b.po_num"),
+        how="left"
+    ) \
+    .where(
+        col("b.po_num").isNull() &
+        col("pol_stat_cd").isin(active_sts) &
+        ~col("plan_code").isin(exclusion_list_sub) &
+        (
+            col("pol_eff_dt").between(
+                date_add(last_day(add_months(lit(last_mthend), lmth)), 1),
+                last_mthend
+            )
+        ) &
+        (col("a.image_date") == last_mthend)
+    ) \
+    .select(col("a.po_num")) \
+    .distinct()
+
+newcustomer_yr = tpolidm_mthend_df.alias("a") \
+    .join(
+        cuslist_yr.alias("b"),
+        on=col("a.po_num") == col("b.po_num"),
+        how="left"
+    ) \
+    .where(
+        col("b.po_num").isNull() &
+        col("pol_stat_cd").isin(active_sts) &
+        ~col("plan_code").isin(exclusion_list_sub) &
+        (year(col("pol_eff_dt")) == lit(rpt_yr)) &
+        (col("pol_eff_dt") <= last_mthend) &
+        (col("a.image_date") == last_mthend)
+    ) \
+    .select(col("a.po_num")) \
+    .distinct()
+#print("custlist_yr:", cuslist_yr.count())
+#print("newcustomer_mth:", newcustomer_mth.count())
+#print("newcustomer_yr:", newcustomer_yr.count())
 
 # COMMAND ----------
 
@@ -626,4 +825,14 @@ customer_table_final.display(10)
 
 # COMMAND ----------
 
-customer_table_final.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/customer_table_{rpt_mth}")
+customer_table_final.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/customer_table_{rpt_mth}")
+att_cus_final.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/att_cus_{rpt_mth}")
+policy_base.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/policy_base_{rpt_mth}")
+product_table.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/product_table_{rpt_mth}")
+cuslist_yr.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/cuslist_{rpt_yr}")
+newcustomer_mth.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_mth}")
+newcustomer_yr.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_yr}")
+
+# COMMAND ----------
+
+
