@@ -13,6 +13,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from datetime import datetime, timedelta
 import calendar
+from functools import reduce
 
 existing_leads_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads.csv'
 cus_seg_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/cseg_cltv'
@@ -252,11 +253,12 @@ existing_leads_tmp = spark.sql(f"""
             cseg.yr_2nd_prod as yr_2nd_prod,
             CAST(NVL(cseg.mthly_incm, 0) as decimal(12,2)) as mthly_incm,
             case when cseg.mthly_incm is not null then
-                 case when cseg.mthly_incm < 1000 then '1. Less than $1k'
+                 case when cseg.mthly_incm > 0 and cseg.mthly_incm < 1000 then '1. Less than $1k'
                       when cseg.mthly_incm >= 1000 and cseg.mthly_incm <= 2000 then '2. $1k-2k'
                       when cseg.mthly_incm > 2000 and cseg.mthly_incm <= 3000 then '3. $2k-3k'
                       when cseg.mthly_incm > 3000 and cseg.mthly_incm <= 5000 then '4. $3k-5k'
                       when cseg.mthly_incm > 5000 then '5. More than $5k'
+                      else '9. Income not declared'
                  end
                  else '9. Income not declared'
             end as mthly_income_cat,
@@ -264,7 +266,7 @@ existing_leads_tmp = spark.sql(f"""
             case when cseg.new_pol_cust_id is not null then '1. CPM purchase' else '2. Non-CPM purchase' end as cpm_pur_cat,
             CAST(NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) as total_face_amt,
             case when NVL(cseg.mthly_incm, 0) = 0 then 0
-                 else CAST(NVL(cseg.mthly_incm, 0)*84 - NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) 
+                 else CAST(NVL(cseg.mthly_incm, 0)*120 - NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) 
             end as protection_gap,
             case when cseg.decile = 1 then '1. VIP'
                  when cseg.decile = 2 then '2. High Value'
@@ -298,7 +300,67 @@ print("Existing Leads (Final):", existing_leads_final.count())
 
 # COMMAND ----------
 
-existing_leads_final.display()
-#existing_leads_final.coalesce(1).write.option("header", "true").csv("abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads_final.csv")
+# MAGIC %md
+# MAGIC <strong>Segmentize data</strong>
 
 # COMMAND ----------
+
+# Rule 1 (Affluent)
+# Segment: Med, High and VIP
+# Age: 27-45
+# Mothly income: High (>$2k)
+# Ins type: Single
+# Protection gap: Under or undefined
+affluent_df = existing_leads_final.filter(
+    (col("segment").isin(["1. VIP","2. High Value","3. Med Value"])) &
+    (col("cus_age_band").isin(["Young Age 27-30","Middle Age 31-45"])) &
+    (~col("mthly_income_cat").isin(["1. Less than $1k","2. $1k-2k"])) &
+    (col("ins_cat") == "1. Single") &
+    (col("protection_cat") != "Over-protected")
+).withColumn("group", lit("Affluent"))
+
+# Rule 2 (Emerging)
+# Segment: All
+# Age: 27-45
+# Mothly income: High (>$2k)
+# Ins type: Any
+# Protection gap: Under or undefined
+emerging_df = existing_leads_final.filter(
+    (col("cus_age_band").isin(["Young Age 27-30","Middle Age 31-45"])) &
+    (~col("mthly_income_cat").isin(["1. Less than $1k","2. $1k-2k"])) &
+    (col("protection_cat") != "Over-protected")) \
+        .join(affluent_df, on=["po_num"], how="left_anti") \
+            .withColumn("group", lit("Emerging"))
+
+# Rule 3 (Retainer)
+# Segment: All
+# Age: 27-45
+# Mothly income: Low (<$2k)
+# Ins type: Any
+# Protection gap: Under or undefined
+retainer_df = existing_leads_final.filter(
+    (col("cus_age_band").isin(["Young Age 27-30","Middle Age 31-45"])) &
+    (col("mthly_income_cat").isin(["1. Less than $1k","2. $1k-2k"])) &
+    (col("protection_cat") != "Over-protected")
+).withColumn("group", lit("Retainer"))
+
+# Rule 4 (others)
+# The rest (or add more here)
+other_df = existing_leads_final.join(
+    affluent_df, on=["po_num"], how="left_anti").join(
+    emerging_df, on=["po_num"], how="left_anti").join(
+    retainer_df, on=["po_num"], how="left_anti"
+).withColumn("group", lit("Others"))
+
+leads_grp = [affluent_df, emerging_df, retainer_df, other_df]
+final_df = reduce(lambda x, y: x.union(y), leads_grp)
+
+print("# of Affluent leads:", affluent_df.count(), ", # of Emerging leads:", emerging_df.count(), ", # of Retainer leads:", retainer_df.count(), ", # of Others:", other_df.count())
+
+# COMMAND ----------
+
+final_df.display()
+
+# COMMAND ----------
+
+
