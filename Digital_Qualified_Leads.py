@@ -148,7 +148,7 @@ needs_model.createOrReplaceTempView("needs_model")
 fmlDF.createOrReplaceTempView("fmlDF")
 faDF.createOrReplaceTempView("faDF")
 
-existing_leads_final = spark.sql(f"""
+existing_leads_tmp = spark.sql(f"""
     select  ex.po_num as po_num,
             cseg.cus_gender as gender,
             cseg.first_pol_eff_dt as frst_pol_dt,
@@ -282,20 +282,23 @@ existing_leads_final = spark.sql(f"""
             faDF fa on ex.po_num=fa.po_num
 """)
 
-existing_leads_final = existing_leads_final.withColumn(
-    "protection_cat",
-    when(col("protection_gap") < 0, "Over-protected")
-    .otherwise(
-        when(col("protection_gap") == 0, "Fully protected")
-        .otherwise("Under-protected")
+existing_leads_final = existing_leads_tmp.filter(col("gender").isin(["Male","Female"])) \
+    .withColumn(
+        "protection_cat",
+        when(col("protection_gap") < 0, "Over-protected")
+        .otherwise(
+            when(col("protection_gap") == 0, "Fully protected")
+            .otherwise("Under-protected")
     )
 )
+    
+existing_leads_final = existing_leads_final.dropDuplicates()
+
 print("Existing Leads (Final):", existing_leads_final.count())
 
 # COMMAND ----------
 
-existing_leads_final.coalesce(1).write.option("header", "true").csv("abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads_final.csv")
+existing_leads_final.display()
+#existing_leads_final.coalesce(1).write.option("header", "true").csv("abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads_final.csv")
 
 # COMMAND ----------
-
-
