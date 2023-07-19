@@ -294,7 +294,7 @@ print("Existing Leads (Final):", existing_leads_final.count())
 
 # COMMAND ----------
 
-existing_leads_final.write.mode("overwrite").csv("abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads_final.csv")
+existing_leads_final.coalesce(1).write.option("header", "true").csv("abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/scratch/existing_leads_final.csv")
 
 # COMMAND ----------
 
