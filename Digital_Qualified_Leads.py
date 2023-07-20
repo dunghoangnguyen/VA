@@ -77,6 +77,7 @@ fatmpDF = tpolidm.filter(col("pol_stat_cd").isin(['1', '3'])) \
 
 faDF = fatmpDF.groupBy("po_num").agg((sum("tot_face_amt") / 23.145).alias("tot_face_amt_usd"))
 
+cus_seg = cus_seg.filter(col("image_date") == "2023-04-30")
 tcoverages = tcoverages.filter(col("image_date") == last_mthend)
 tfield = tfield.filter(col("image_date") == last_mthend)
 tpolidm = tpolidm.filter(col("image_date") == last_mthend)
@@ -197,10 +198,11 @@ existing_leads_tmp = spark.sql(f"""
             end as comm_type,
             case when cseg.total_ape < 500 then '1. Less than $500'
                  when cseg.total_ape >= 500 and cseg.total_ape < 1000 then '2. $500-$1k'
-                 when cseg.total_ape >= 2000 and cseg.total_ape < 3000 then '3. $2k-3k'
-                 when cseg.total_ape >= 3000 and cseg.total_ape < 5000 then '4. $3k-5k'
-                 when cseg.total_ape >= 5000 and cseg.total_ape < 10000 then '5. $5k-10k'
-                 when cseg.total_ape >= 10000 then '6. More than $10k'
+                 when cseg.total_ape >= 1000 and cseg.total_ape < 2000 then '3. $1k-2k'
+                 when cseg.total_ape >= 2000 and cseg.total_ape < 3000 then '4. $2k-3k'
+                 when cseg.total_ape >= 3000 and cseg.total_ape < 5000 then '5. $3k-5k'
+                 when cseg.total_ape >= 5000 and cseg.total_ape < 10000 then '6. $5k-10k'
+                 when cseg.total_ape >= 10000 then '7. More than $10k'
             end as ape_usd_cat,
             case when cseg.top1_3_lapse = 1 then 'High lapse rate'
                  else 'Low lapse rate'
@@ -251,13 +253,13 @@ existing_leads_tmp = spark.sql(f"""
             cseg.f_2nd_whole as whole_2nd,
             cseg.f_2nd_invest as invest_2nd,
             cseg.yr_2nd_prod as yr_2nd_prod,
-            CAST(NVL(cseg.mthly_incm, 0) as decimal(12,2)) as mthly_incm,
-            case when cseg.mthly_incm is not null then
-                 case when cseg.mthly_incm > 0 and cseg.mthly_incm < 1000 then '1. Less than $1k'
-                      when cseg.mthly_incm >= 1000 and cseg.mthly_incm <= 2000 then '2. $1k-2k'
-                      when cseg.mthly_incm > 2000 and cseg.mthly_incm <= 3000 then '3. $2k-3k'
-                      when cseg.mthly_incm > 3000 and cseg.mthly_incm <= 5000 then '4. $3k-5k'
-                      when cseg.mthly_incm > 5000 then '5. More than $5k'
+            CAST(NVL(cseg.incm_2, 0) as decimal(12,2)) as mthly_incm,
+            case when cseg.incm_2 is not null then
+                 case when cseg.incm_2 > 0 and cseg.incm_2 < 1000 then '1. Less than $1k'
+                      when cseg.incm_2 >= 1000 and cseg.incm_2 <= 2000 then '2. $1k-2k'
+                      when cseg.incm_2 > 2000 and cseg.incm_2 <= 3000 then '3. $2k-3k'
+                      when cseg.incm_2 > 3000 and cseg.incm_2 <= 5000 then '4. $3k-5k'
+                      when cseg.incm_2 > 5000 then '5. More than $5k'
                       else '9. Income not declared'
                  end
                  else '9. Income not declared'
@@ -265,8 +267,8 @@ existing_leads_tmp = spark.sql(f"""
             case when cseg.lead is not null then '1. CPM lead' else '2. Non-CPM' end as cpm_cat,
             case when cseg.new_pol_cust_id is not null then '1. CPM purchase' else '2. Non-CPM purchase' end as cpm_pur_cat,
             CAST(NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) as total_face_amt,
-            case when NVL(cseg.mthly_incm, 0) = 0 then 0
-                 else CAST(NVL(cseg.mthly_incm, 0)*120 - NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) 
+            case when NVL(cseg.incm_2, 0) = 0 then 0
+                 else CAST(NVL(cseg.incm_2, 0)*120 - NVL(fa.tot_face_amt_usd, 0) as decimal(12,2)) 
             end as protection_gap,
             case when cseg.decile = 1 then '1. VIP'
                  when cseg.decile = 2 then '2. High Value'
