@@ -161,6 +161,12 @@ existing_leads_tmp = spark.sql(f"""
                  when floor(months_between('{last_mthend}', cseg.first_pol_eff_dt)) > 36 then '4. More than 3 years'
             end as mob_cat,
             cseg.client_tenure as client_tenure,
+            case when cseg.client_tenure < 3 then '1. Less than 3 years'
+                 when cseg.client_tenure >= 3 and cseg.client_tenure < 5 then '2. 3-5 years'
+                 when cseg.client_tenure >= 5 and cseg.client_tenure < 7 then '3. 5-7 years' 
+                 when cseg.client_tenure >= 7 and cseg.client_tenure < 10 then '4. 7-10 years'
+                 else '5. >10 years'
+            end as client_tenure_cat,
             case when cseg.pol_count<2 then '1.Only 1 policy'
                  when cseg.pol_count between 2 and 3 then '2.2-3 policies'
                  when cseg.pol_count between 3 and 5 then '3.3-5 policies'
