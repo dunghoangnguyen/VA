@@ -222,35 +222,38 @@ cus_metrics = spark.read.parquet(f"{lab_Path}CUS_METRICS").toPandas()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <strong>Show BMI distribution graphs</strong>
+# MAGIC <strong>Apply filteres/exclusion rules</strong>
 
 # COMMAND ----------
 
-# Exclude group of customers whose age is below 20
-cus_metrics_filtered = cus_metrics[cus_metrics["last_age_cat"] != "1. <20yo"]
+# Add exclusion rules here
+cus_metrics_filtered = cus_metrics[(cus_metrics["last_age_cat"] != "1. <20yo") & 
+                                   (cus_metrics["status"] == "Active") &
+                                   (cus_metrics["last_bmi_cat"].isin(["Over-weight", "Obese"]))]
 
+display(cus_metrics_filtered)
 # Plotting the distribution of (status, last_bmi_cat)
-plt.figure(figsize=(12,6))
-sns.countplot(x='status', hue='last_bmi_cat', data=cus_metrics_filtered)
-plt.title('Distribution of Customer status and BMI (excl. age < 20)')
-plt.show()
+#plt.figure(figsize=(12,6))
+#sns.countplot(x='status', hue='last_bmi_cat', data=cus_metrics_filtered)
+#plt.title('Distribution of Customer status and BMI (excl. age < 20)')
+#plt.show()
 
 # Plotting the distribution of (gender, last_bmi_cat)
-plt.figure(figsize=(12,6))
-sns.countplot(x='gender', hue='last_bmi_cat', data=cus_metrics_filtered)
-plt.title('Distribution of Gender and BMI (excl. age < 20)')
-plt.show()
+#plt.figure(figsize=(12,6))
+#sns.countplot(x='gender', hue='last_bmi_cat', data=cus_metrics_filtered)
+#plt.title('Distribution of Gender and BMI (excl. age < 20)')
+#plt.show()
 
 # Plotting the distribution of (last_age_cat, last_bmi_cat)
-plt.figure(figsize=(12,6))
-sns.countplot(x='last_age_cat', hue='last_bmi_cat', data=cus_metrics_filtered)
-plt.title('Distribution of Age and BMI (excl. age < 20)')
-plt.show()
+#plt.figure(figsize=(12,6))
+#sns.countplot(x='last_age_cat', hue='last_bmi_cat', data=cus_metrics_filtered)
+#plt.title('Distribution of Age and BMI (excl. age < 20)')
+#plt.show()
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <strong>Show graphics in % bar</strong>
+# MAGIC <strong>Deepdive analysis</strong>
 
 # COMMAND ----------
 
@@ -258,6 +261,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Normalizing the data to show percentages
+all_bmi_filtered = cus_metrics_filtered.groupby(['last_age_cat', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
+all_bmi_filtered['percent'] = all_bmi_filtered['counts'] / all_bmi_filtered['counts'].sum()
+
 gender_bmi_unfiltered = cus_metrics.groupby(['status', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
 gender_bmi_unfiltered['percent'] = gender_bmi_unfiltered['counts'] / gender_bmi_unfiltered['counts'].sum()
 
@@ -271,21 +277,30 @@ age_bmi_filtered = cus_metrics_filtered.groupby(['status', 'last_age_cat', 'last
 age_bmi_filtered['percent'] = age_bmi_filtered['counts'] / age_bmi_filtered['counts'].sum()
 
 # Plotting the distribution of (gender, last_bmi_cat) in terms of percentages
-plt.figure(figsize=(12,6))
-sns.barplot(x='gender', y='percent', hue='last_bmi_cat', data=gender_bmi_filtered)
-plt.title('Distribution of Gender and BMI (in percentages excl. age < 20)')
-plt.show()
+#plt.figure(figsize=(12,6))
+#sns.barplot(x='gender', y='percent', hue='last_bmi_cat', data=gender_bmi_filtered)
+#plt.title('Distribution of Gender and BMI (in percentages excl. age < 20)')
+#plt.show()
 
 # Plotting the distribution of (last_age_cat, last_bmi_cat) in terms of percentages
+#plt.figure(figsize=(12,6))
+#sns.barplot(x='last_age_cat', y='percent', hue='last_bmi_cat', data=age_bmi_filtered)
+#plt.title('Distribution of Age and BMI (in percentages excl. age < 20)')
+#plt.show()
+
+# Combine the two graphs as one
+all_bmi_filtered['age_gender'] = all_bmi_filtered['last_age_cat'] + ' - ' + all_bmi_filtered['gender']
+
+# Re-plotting the distribution by Age-Gender and BMI in terms of percentages
 plt.figure(figsize=(12,6))
-sns.barplot(x='last_age_cat', y='percent', hue='last_bmi_cat', data=age_bmi_filtered)
-plt.title('Distribution of Age and BMI (in percentages excl. age < 20)')
+sns.countplot(y='age_gender', hue='last_bmi_cat', data=all_bmi_filtered)
+plt.title('High risk distribution of BMI by Age and Gender (in % excl. age < 20)')
 plt.show()
 
 # COMMAND ----------
 
-gender_bmi_unfiltered
+display(all_bmi_filtered)
 
 # COMMAND ----------
 
-display(age_bmi_unfiltered)
+#display(age_bmi_unfiltered)
