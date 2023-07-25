@@ -27,20 +27,24 @@ posstg_db = 'VN_PUBLISHED_POSSTG_DB/'
 cas_db = 'VN_PUBLISHED_CAS_DB/'
 datamart_db = 'VN_CURATED_DATAMART_DB/'
 reports_db = 'VN_CURATED_REPORTS_DB/'
+snapshot_db = 'VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/'
 
 #tposs_client = spark.read.parquet(f"{pro_Path}{posstg_db}TPOSS_CLIENT/")
 tap_client_details = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_DETAILS/")
 tap_client_add_info = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_ADD_INFO")
 tclaims_conso_all = spark.read.parquet(f"{cur_Path}{reports_db}TCLAIMS_CONSO_ALL/")
 tporidm = spark.read.parquet(f"{cur_Path}{datamart_db}TPORIDM_MTHEND/")
+tcoverages = spark.read.parquet(f"{pro_Path}{snapshot_db}TCOVERAGES/")
 #tposs_client = tposs_client.toDF(*[col.lower() for col in tposs_client.columns])
 tap_client_details = tap_client_details.toDF(*[col.lower() for col in tap_client_details.columns])
 tap_client_add_info = tap_client_add_info.toDF(*[col.lower() for col in tap_client_add_info.columns])
 tclaims_conso_all = tclaims_conso_all.toDF(*[col.lower() for col in tclaims_conso_all.columns])
 tporidm = tporidm.toDF(*[col.lower() for col in tporidm.columns])
+tcoverages = tcoverages.toDF(*[col.lower() for col in tcoverages.columns])
 
 tclaims_conso_all = tclaims_conso_all.filter(col("reporting_date") <= last_mthend)
 tporidm = tporidm.filter(col("image_date") == last_mthend)
+tcoverages = tcoverages.filter(col("image_date") == last_mthend)
 
 # COMMAND ----------
 
@@ -82,13 +86,41 @@ tporidm = tporidm.filter(col("image_date") == last_mthend)
 #    "last_bmi"
 #).dropDuplicates()
 
+# Convert the wrongly capture height/weight
+tap_client_add_info = tap_client_add_info.withColumn("new_height", 
+                                                when(
+                                                    (col("height") < 100) &
+                                                    (col("weight") > 100), col("weight")
+                                                ) \
+                                                .otherwise(
+                                                        when(
+                                                            (col("weight") < 100) &
+                                                            (col("height") < col("weight")), col("height") + 100
+                                                            ) \
+                                                        .otherwise(col("height"))
+                                                )
+                                        ) \
+                                        .withColumn("new_weight",
+                                                when(
+                                                    (col("height") < 100) &
+                                                    (col("weight") > 100), col("height")
+                                                ) \
+                                                .otherwise(
+                                                    when(
+                                                        col("weight") > col("height"), col("height")
+                                                    ) \
+                                                    .otherwise(col("weight"))
+                                                )
+                                        )
+tap_client_add_info.display()
+
 tap_client_df = tap_client_details.alias("a").join(tap_client_add_info.select(
     "app_num",
     "cli_num",
     "height_unit",
-    "height",
+    "new_height",
     "weight_unit",
-    "weight"
+    "new_weight"
 ).alias("b"), on=["app_num","cli_num"], how="inner") \
     .select(
         "a.app_num",
@@ -96,13 +128,14 @@ tap_client_df = tap_client_details.alias("a").join(tap_client_add_info.select(
         "a.sex_code",
         "a.age",
         "b.height_unit",
-        "b.height",
+        col("b.new_height").alias("height"),
         "b.weight_unit",
-        "b.weight"
+        col("b.new_weight").alias("weight")
     ) \
 .where((col("weight").isNotNull()) & 
-       (col("weight") != 0))
-tap_client_df = tap_client_df.dropDuplicates()
+       (col("weight") != 0)
+       )
+tap_client_df = tap_client_df.dropDuplicates(["app_num", "cli_num"])
 
 # Define the window spec for sorting
 tap_client_spec = Window.partitionBy("cli_num").orderBy("app_num")
@@ -128,7 +161,7 @@ tap_client_final_df = tap_client_df.select(
     "last_height",
     "last_weight",
     "last_bmi"
-).dropDuplicates()
+).dropDuplicates(["cli_num"])
 
 tclaim_df = tclaims_conso_all.filter(
     (col("claim_received_date") >= "2021-01-01") &
@@ -136,18 +169,27 @@ tclaim_df = tclaims_conso_all.filter(
     (col("claim_type").isin(["3","7","8","11","27","28","29"]))
 ).dropDuplicates(["claim_id"])
 
-tclaim_sum_df = tclaim_df.groupBy("la_client_number").agg(countDistinct("claim_id").alias("number_of_claims"))
+# Get list of customers who've submitted claims since 2021
+tclaim_sum_df = tclaim_df.groupBy(col("la_client_number").alias("cli_num")).agg(countDistinct("claim_id").alias("number_of_claims"))
 
-tporidm_sum_df = tporidm.withColumn("status", when(col("cvg_stat_cd").isin(["1","2","3","5"]), "Active").otherwise("Inactive"))\
-                        .groupBy(col("insrd_num").alias("cli_num")) \
+# Get list of Active customers
+tcov_sum_df = tcoverages.withColumn("status", when(col("cvg_stat_cd").isin(["1","2","3","5"]), "Active").otherwise("Inactive")) \
+                        .groupBy(col("cli_num")) \
                         .agg(min("cvg_eff_dt").alias("first_eff_dt"), 
                              min("status").alias("status")) \
                         .where(col("first_eff_dt") >= "2021-01-01") \
                         .dropDuplicates()
 
+# Get list of Smokers
+tsmkr_df = tcoverages.filter(col("smkr_code") == "S") \
+                .select("cli_num",
+                       "smkr_code") \
+                .dropDuplicates()
+
 print("#'s tap_client_final_df records:", tap_client_final_df.count())
 print("#'s tclaim_sum_df records:", tclaim_sum_df.count())
-print("#'s tporidm_sum_df:", tporidm_sum_df.count())
+print("#'s tcov_sum_df:", tporidm_sum_df.count())
+print("#'s tsmkr_df:", tsmkr_df.count())
 
 # COMMAND ----------
 
@@ -159,6 +201,7 @@ print("#'s tporidm_sum_df:", tporidm_sum_df.count())
 tap_client_final_df.createOrReplaceTempView("tap_client_final")
 tclaim_sum_df.createOrReplaceTempView("tclaim_sum")
 tporidm_sum_df.createOrReplaceTempView("tporidm_sum")
+tsmkr_df.createOrReplaceTempView("tsmkr")
 
 final_df = spark.sql("""
     select  tap.cli_num,
@@ -195,10 +238,12 @@ final_df = spark.sql("""
                  when tap.last_bmi > 30 then "Obese"
             end as last_bmi_cat,
             nvl(tclm.number_of_claims, 0) as number_of_claims,
-            tcov.status
+            tcov.status,
+            case when tsmkr.cli_num is not null then 'Smoker' else 'Non-smoker' end as smkr_cat
     from    tap_client_final tap inner join
             tporidm_sum tcov on tap.cli_num=tcov.cli_num left join
-            tclaim_sum tclm on tap.cli_num=tclm.la_client_number               
+            tclaim_sum tclm on tap.cli_num=tclm.cli_num left join
+            tsmkr on tap.cli_num=tsmkr.cli_num             
 """)
 
 print("#'s final_df records:", final_df.count())
@@ -227,7 +272,7 @@ cus_metrics = spark.read.parquet(f"{lab_Path}CUS_METRICS").toPandas()
 # COMMAND ----------
 
 # Add exclusion rules here
-cus_metrics_filtered = cus_metrics[(cus_metrics["last_age_cat"] != "1. <20yo") & 
+cus_metrics_filtered = cus_metrics[(cus_metrics["last_age_cat"] != "01. <20yo") & 
                                    (cus_metrics["status"] == "Active") &
                                    (cus_metrics["last_bmi_cat"].isin(["Over-weight", "Obese"]))]
 
@@ -261,7 +306,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Normalizing the data to show percentages
-all_bmi_filtered = cus_metrics_filtered.groupby(['last_age_cat', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
+all_bmi_filtered = cus_metrics_filtered.groupby(['last_age_cat', 'gender', 'smkr_cat', 'last_bmi_cat']).size().reset_index(name='counts')
 all_bmi_filtered['percent'] = all_bmi_filtered['counts'] / all_bmi_filtered['counts'].sum()
 
 gender_bmi_unfiltered = cus_metrics.groupby(['status', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
@@ -289,13 +334,13 @@ age_bmi_filtered['percent'] = age_bmi_filtered['counts'] / age_bmi_filtered['cou
 #plt.show()
 
 # Combine the two graphs as one
-all_bmi_filtered['age_gender'] = all_bmi_filtered['last_age_cat'] + ' - ' + all_bmi_filtered['gender']
+#all_bmi_filtered['age_gender'] = all_bmi_filtered['last_age_cat'] + ' - ' + all_bmi_filtered['gender']
 
 # Re-plotting the distribution by Age-Gender and BMI in terms of percentages
-plt.figure(figsize=(12,6))
-sns.countplot(y='age_gender', hue='last_bmi_cat', data=all_bmi_filtered)
-plt.title('High risk distribution of BMI by Age and Gender (in % excl. age < 20)')
-plt.show()
+#plt.figure(figsize=(12,6))
+#sns.countplot(y='age_gender', hue='last_bmi_cat', data=all_bmi_filtered)
+#plt.title('High risk distribution of BMI by Age and Gender (in % excl. age < 20)')
+#plt.show()
 
 # COMMAND ----------
 
