@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import calendar
 # Get the last month-end from current system date
 #last_mthend = datetime.strftime(datetime.now().replace(day=1) - timedelta(days=1), '%Y-%m-%d')
-x = 0 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
+x = 1 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
 today = datetime.now()
 first_day_of_current_month = today.replace(day=1)
 current_month = first_day_of_current_month
@@ -32,17 +32,20 @@ snapshot_db = 'VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/'
 #tposs_client = spark.read.parquet(f"{pro_Path}{posstg_db}TPOSS_CLIENT/")
 tap_client_details = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_DETAILS/")
 tap_client_add_info = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_ADD_INFO")
-tclaims_conso_all = spark.read.parquet(f"{cur_Path}{reports_db}TCLAIMS_CONSO_ALL/")
+tclaim_details = spark.read.parquet(f"{pro_Path}{snapshot_db}TCLAIM_DETAILS/")
+tclaim_diag = spark.read.parquet(f"{pro_Path}{cas_db}TCLM_DIAGNOSIS/")
 tporidm = spark.read.parquet(f"{cur_Path}{datamart_db}TPORIDM_MTHEND/")
 tcoverages = spark.read.parquet(f"{pro_Path}{snapshot_db}TCOVERAGES/")
+
 #tposs_client = tposs_client.toDF(*[col.lower() for col in tposs_client.columns])
 tap_client_details = tap_client_details.toDF(*[col.lower() for col in tap_client_details.columns])
 tap_client_add_info = tap_client_add_info.toDF(*[col.lower() for col in tap_client_add_info.columns])
-tclaims_conso_all = tclaims_conso_all.toDF(*[col.lower() for col in tclaims_conso_all.columns])
+tclaim_details = tclaim_details.toDF(*[col.lower() for col in tclaim_details.columns])
+tclaim_diag = tclaim_diag.toDF(*[col.lower() for col in tclaim_diag.columns])
 tporidm = tporidm.toDF(*[col.lower() for col in tporidm.columns])
 tcoverages = tcoverages.toDF(*[col.lower() for col in tcoverages.columns])
 
-tclaims_conso_all = tclaims_conso_all.filter(col("reporting_date") <= last_mthend)
+tclaim_details = tclaim_details.filter(col("image_date") == last_mthend)
 tporidm = tporidm.filter(col("image_date") == last_mthend)
 tcoverages = tcoverages.filter(col("image_date") == last_mthend)
 
@@ -112,7 +115,7 @@ tap_client_add_info = tap_client_add_info.withColumn("new_height",
                                                     .otherwise(col("weight"))
                                                 )
                                         )
-tap_client_add_info.display()
+#tap_client_add_info.display()
 
 tap_client_df = tap_client_details.alias("a").join(tap_client_add_info.select(
     "app_num",
@@ -163,14 +166,27 @@ tap_client_final_df = tap_client_df.select(
     "last_bmi"
 ).dropDuplicates(["cli_num"])
 
-tclaim_df = tclaims_conso_all.filter(
-    (col("claim_received_date") >= "2021-01-01") &
-    (col("claim_status").isin(["A","D"])) &
-    (col("claim_type").isin(["3","7","8","11","27","28","29"]))
-).dropDuplicates(["claim_id"])
+tclaim_df = tclaim_details.filter(
+    (col("clm_stat_code").isin(["A","D"])) &
+    (col("clm_code").isin(["3","7","8","11","27","28","29"]))).alias("tclm")\
+        .join(
+            tclaim_diag.alias("tdg"),
+            on=col("tclm.clm_diagnosis") == col("tdg.diag_code"),
+            how="inner"
+        )\
+        .select(
+            "cli_num",
+            "clm_id"
+        )\
+        .where(
+            lower(col("diag_nm_eng")).contains("diabetes") |
+            lower(col("diag_nm_eng")).contains("obese") |
+            lower(col("diag_nm_eng")).contains("obesity") |
+            lower(col("diag_nm_eng")).contains("adiposity")
+        )
 
 # Get list of customers who've submitted claims since 2021
-tclaim_sum_df = tclaim_df.groupBy(col("la_client_number").alias("cli_num")).agg(countDistinct("claim_id").alias("number_of_claims"))
+tclaim_sum_df = tclaim_df.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
 
 # Get list of Active customers
 tcov_sum_df = tcoverages.withColumn("status", when(col("cvg_stat_cd").isin(["1","2","3","5"]), "Active").otherwise("Inactive")) \
