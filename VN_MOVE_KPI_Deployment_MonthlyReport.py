@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ## Last modified: 2023.05.18
+# MAGIC ## Last modified: 2023.08.05
 # MAGIC by San
 # MAGIC
 # MAGIC <font color='green'>(one run would take appx. 20 min)</font>
@@ -9,6 +9,10 @@
 # MAGIC -step 2: run everything
 # MAGIC
 # MAGIC <b>** if you want to run for more month after one run, you can skip the step <font color='blue'>0.Read tables</font>, rerun the parameter cell and start from <font color='blue'>1.Pre analysis</font>.</b>
+
+# COMMAND ----------
+
+#%run /Curation/Utilities/01_Initialize
 
 # COMMAND ----------
 
@@ -33,6 +37,7 @@ import time
 
 # current month (all the behaviors before the 1st of current month would be considered)
 current_mth = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-01')
+#current_mth = '2023-08-01'
 # the snap shot would be taken on the last day of the last month
 snapshot_dt = str(pd.to_datetime(current_mth) -relativedelta(days=1))[:10]
 # repurchase observing window (repurchase in n month after onboarding, 6 in default)
@@ -103,6 +108,9 @@ df_movekey = movekey.select(
 
 df_movekey = df_movekey.withColumn('po_num', expr("substring(key_value, 2)"))
 
+# Set cap to MOVE creation date
+df_movekey = df_movekey.filter(col('created_date') <= snapshot_dt)
+
 df_move = df_moveid.join(df_movekey, on='keyid', how='inner').dropDuplicates()
 print("Number of records and columns in df_move: ", df_move.count(),",", len(df_move.columns))
 #df_move.display(10)
@@ -134,7 +142,7 @@ df_policies = policy.filter(
         'po_num',
         'pol_num',
         #'plan_code',
-        'tot_ape_usd',
+        col('tot_ape_usd').cast("float"),
         col('sbmt_dt').alias('pol_sbmt_dt'),
         'pol_trmn_dt',
         'pmt_mode',
@@ -142,8 +150,8 @@ df_policies = policy.filter(
         'sa_code'
     ).repartition('pol_num').dropDuplicates()
 
-#print("Number of records and columns in df_policies: ", df_policies.count(),",", len(df_policies.columns))
-#df_policies.display(10)
+print("Number of records and columns in df_policies: ", df_policies.count(),",", len(df_policies.columns))
+# df_policies.display(10)
 
 # COMMAND ----------
 
@@ -178,14 +186,14 @@ df_coverage = coverage.filter(
         'cvg_eff_dt',
         'plan_code',
         'customer_needs',
-        'cvg_prem_usd',
+        col('cvg_prem_usd').cast("float"),
         'cvg_stat_cd',
         'cvg_stat_desc',
         concat_ws('-',col('plan_code'),col('vers_num')).alias('plan_key')
     ).repartition('pol_num', 'cvg_eff_dt')
 
-#print("Number of records and columns in df_coverage: ", df_coverage.count(),",", len(df_coverage.columns))
-#df_coverage.display(10)
+print("Number of records and columns in df_coverage: ", df_coverage.count(),",", len(df_coverage.columns))
+# df_coverage.display(10)
 
 # COMMAND ----------
 
@@ -213,8 +221,8 @@ df_coverage_iss = coverage_iss.filter(
         concat_ws('-',col('plan_code'),col('vers_num')).alias('plan_key')
     ).repartition('pol_num', 'cvg_eff_dt')
 
-#print("Number of records and columns in df_coverage_iss: ", df_coverage_iss.count(),",", len(df_coverage_iss.columns))
-#df_coverage_iss.display(10)
+print("Number of records and columns in df_coverage_iss: ", df_coverage_iss.count(),",", len(df_coverage_iss.columns))
+# df_coverage_iss.display(10)
 
 # COMMAND ----------
 
@@ -230,7 +238,7 @@ df_plan = plan.select(
     concat_ws('-', col('plan_code'), col('vers_num')).alias('plan_key')
 )
 
-#print("Number of records and columns in df_plan: ", df_plan.count(),",", len(df_plan.columns))
+print("Number of records and columns in df_plan: ", df_plan.count(),",", len(df_plan.columns))
 
 # COMMAND ----------
 
@@ -436,8 +444,8 @@ df = df.withColumn(
     ).otherwise(0)
 )
 
-print("Number of records and columns in df_control: ", df_control.count(), ",", len(df_control.columns))
-print("Number of records and columns in df: ", df.count(), ",", len(df.columns))
+#print("Number of records and columns in df_control: ", df_control.count(), ",", len(df_control.columns))
+#print("Number of records and columns in df: ", df.count(), ",", len(df.columns))
 #df.display(10)
 
 # COMMAND ----------
@@ -505,12 +513,12 @@ start_dt = str(onboarding_mth)[:10]
 end_dt = str(pd.to_datetime(start_dt) + relativedelta(months=+1))[:10]
 print("onboarding month:", start_dt[:7])
 
-df_test_tmp = df[(df.first_cvg_iss_dt >= start_dt) &
-                 (df.first_cvg_iss_dt < end_dt)]
-df_control_tmp = df_control[(df_control.first_cvg_iss_dt >= pd.to_datetime(start_dt)) &
-                            (df_control.first_cvg_iss_dt < pd.to_datetime(end_dt))]
-df_test_tmp['group'] = 'Move'
-df_control_tmp['group'] = 'Control'
+df_test_tmp = df[(pd.to_datetime(df.first_cvg_iss_dt) >= pd.to_datetime(start_dt)) &
+                 (pd.to_datetime(df.first_cvg_iss_dt) < pd.to_datetime(end_dt))]
+df_control_tmp = df_control[(pd.to_datetime(df_control.first_cvg_iss_dt) >= pd.to_datetime(start_dt)) &
+                            (pd.to_datetime(df_control.first_cvg_iss_dt) < pd.to_datetime(end_dt))]
+df_test_tmp.loc[:,'group'] = 'Move'
+df_control_tmp.loc[:,'group'] = 'Control'
 
 print(f"# of onboarding customer in {start_dt[:7]} in move group:", df_test_tmp['po_num'].nunique())
 print(f"# of onboarding customer in {start_dt[:7]} in control group:", df_control_tmp['po_num'].nunique())
@@ -518,7 +526,6 @@ print(f"# of onboarding customer in {start_dt[:7]} in control group:", df_contro
 # COMMAND ----------
 
 # only consider the repurchase of the user who activated move in a certain time period(6 mths)
-
 df_tmp = pd.concat([df_test_tmp,df_control_tmp])
 
 df_tmp = df_tmp[(df_tmp['mth_diff_activate_1stiss']<=activate_obsv_window)|(df_tmp['group']=='Control')]
@@ -553,26 +560,53 @@ df_tmp_repurchased = df_cmpr[df_cmpr['have_increased_ape']==1].groupby(['group']
                                                                                        'cvg_ape_usd_x':'mean',
                                                                                     'increased_ape':'mean',
                                                                                     })
-df_tmp_repurchased['incrimental ape %'] = df_tmp_repurchased['increased_ape']/df_tmp_repurchased['cvg_ape_usd_x']
+# df_tmp_repurchased['incrimental ape %'] = df_tmp_repurchased['increased_ape']/df_tmp_repurchased['cvg_ape_usd_x']
+
+# df_tmp = df_tmp.merge(df_tmp_repurchased, how='left', on='group')
+
+# df_tmp.columns = ["# of Cus", "# of Cus Repurchased in 6 Mth", "% of Repurchased in 6 Mth",
+#                   "avg # of Pol hold of Repurchased Cus", "Start APE", "Increased APE in 6 month",
+#                   "Incremental APE % (increased/start)"]
+# df_tmp = df_tmp.T
+# df_tmp['Move Incremental'] = df_tmp['Move'] - df_tmp['Control']
+# df_tmp.loc['% of Repurchased in 6 Mth'] = df_tmp.loc['% of Repurchased in 6 Mth'].apply(lambda x: '{:.2f}%'.format(x*100))
+# df_tmp.loc['Incremental APE % (increased/start)'] = df_tmp.loc['Incremental APE % (increased/start)'].apply(lambda x: '{:.2f}%'.format(x*100))
+# df_tmp.loc['% of Repurchased in 6 Mth','Move Incremental'] = df_tmp.loc['% of Repurchased in 6 Mth','Move Incremental'].strip("%")+'ppt'
+# df_tmp.loc['Incremental APE % (increased/start)','Move Incremental'] = df_tmp.loc['Incremental APE % (increased/start)','Move Incremental'].strip("%")+'ppt'
+# df_tmp.loc['avg # of Pol hold of Repurchased Cus'] = df_tmp.loc['avg # of Pol hold of Repurchased Cus'].apply(lambda x: '{:.2f}'.format(x))
+# df_tmp.loc['Start APE'] = df_tmp.loc['Start APE'].apply(lambda x: '{:.0f}'.format(x))
+# df_tmp.loc['Increased APE in 6 month'] = df_tmp.loc['Increased APE in 6 month'].apply(lambda x: '{:.0f}'.format(x))
+# df_tmp.loc['# of Cus','Move Incremental'] = '-'
+# df_tmp.loc['# of Cus Repurchased in 6 Mth','Move Incremental'] = '-'
+
+# df_tmp.to_csv(f'VN_MOVE_Xsell_{current_mth[:7]}.csv',index=False)
+df_tmp
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Incremental APE
+# MAGIC <strong>Formula: # MOVE group customer * incremental ppt * MOVE group ticket size</strong>
+
+# COMMAND ----------
+
+#new incremental APE definition (# MOVE group customer * incremental ppt * MOVE group ticket size)
 
 df_tmp = df_tmp.merge(df_tmp_repurchased, how='left', on='group')
 
 df_tmp.columns = ["# of Cus", "# of Cus Repurchased in 6 Mth", "% of Repurchased in 6 Mth",
-                  "avg # of Pol hold of Repurchased Cus", "Start APE", "Increased APE in 6 month",
-                  "Incremental APE % (increased/start)"]
+                  "avg # of Pol hold of Repurchased Cus", "Start APE", "Avg Increased APE in 6 month"]
 df_tmp = df_tmp.T
 df_tmp['Move Incremental'] = df_tmp['Move'] - df_tmp['Control']
+df_tmp.loc['Avg Increased APE in 6 month','Move Incremental'] = df_tmp.loc['# of Cus','Move'] * df_tmp.loc['% of Repurchased in 6 Mth','Move Incremental'] * df_tmp.loc['Avg Increased APE in 6 month','Move']
 df_tmp.loc['% of Repurchased in 6 Mth'] = df_tmp.loc['% of Repurchased in 6 Mth'].apply(lambda x: '{:.2f}%'.format(x*100))
-df_tmp.loc['Incremental APE % (increased/start)'] = df_tmp.loc['Incremental APE % (increased/start)'].apply(lambda x: '{:.2f}%'.format(x*100))
 df_tmp.loc['% of Repurchased in 6 Mth','Move Incremental'] = df_tmp.loc['% of Repurchased in 6 Mth','Move Incremental'].strip("%")+'ppt'
-df_tmp.loc['Incremental APE % (increased/start)','Move Incremental'] = df_tmp.loc['Incremental APE % (increased/start)','Move Incremental'].strip("%")+'ppt'
 df_tmp.loc['avg # of Pol hold of Repurchased Cus'] = df_tmp.loc['avg # of Pol hold of Repurchased Cus'].apply(lambda x: '{:.2f}'.format(x))
 df_tmp.loc['Start APE'] = df_tmp.loc['Start APE'].apply(lambda x: '{:.0f}'.format(x))
-df_tmp.loc['Increased APE in 6 month'] = df_tmp.loc['Increased APE in 6 month'].apply(lambda x: '{:.0f}'.format(x))
+df_tmp.loc['Avg Increased APE in 6 month'] = df_tmp.loc['Avg Increased APE in 6 month'].apply(lambda x: '{:.0f}'.format(x))
 df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Cus Repurchased in 6 Mth','Move Incremental'] = '-'
 
-df_tmp.to_csv(f'VN_MOVE_Xsell_{current_mth[:7]}.csv',index=False)
 df_tmp
 
 # COMMAND ----------
@@ -587,10 +621,10 @@ cohort_duration_mth = 1
 end_dt = str(pd.to_datetime(start_dt)+relativedelta(months=+cohort_duration_mth))[:10]
 print("onboarding month:", start_dt[:7])
 
-df_test_tmp = df[(df.first_cvg_iss_dt >= start_dt) &
-                 (df.first_cvg_iss_dt < end_dt)]
-df_control_tmp = df_control[(df_control.first_cvg_iss_dt >= pd.to_datetime(start_dt)) &
-                            (df_control.first_cvg_iss_dt < pd.to_datetime(end_dt))]
+df_test_tmp = df[(pd.to_datetime(df.first_cvg_iss_dt) >= pd.to_datetime(start_dt)) &
+                 (pd.to_datetime(df.first_cvg_iss_dt) < pd.to_datetime(end_dt))]
+df_control_tmp = df_control[(pd.to_datetime(df_control.first_cvg_iss_dt) >= pd.to_datetime(start_dt)) &
+                            (pd.to_datetime(df_control.first_cvg_iss_dt) < pd.to_datetime(end_dt))]
 df_test_tmp['group'] = 'Move'
 df_control_tmp['group'] = 'Control'
 
@@ -623,7 +657,7 @@ df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Lapsed','Move Incremental'] = '-'
 
 df_spark = spark.createDataFrame(df_tmp)
-df_spark.write.csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
+df_spark.write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
 df_tmp
 
 # COMMAND ----------

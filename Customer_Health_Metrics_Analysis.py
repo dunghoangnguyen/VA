@@ -1,9 +1,21 @@
 # Databricks notebook source
+# MAGIC %md
+# MAGIC # Customer Health Analysis - BMI
+# MAGIC ### Purpose is to identify group of high risk to Obesity customers
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong>Load all params, paths and libs</strong>
+
+# COMMAND ----------
+
 from pyspark.sql import Window
 from pyspark.sql.types import DecimalType
 from pyspark.sql.functions import *
 from datetime import datetime, timedelta
 import calendar
+from functools import reduce
 # Get the last month-end from current system date
 #last_mthend = datetime.strftime(datetime.now().replace(day=1) - timedelta(days=1), '%Y-%m-%d')
 x = 1 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
@@ -29,6 +41,16 @@ datamart_db = 'VN_CURATED_DATAMART_DB/'
 reports_db = 'VN_CURATED_REPORTS_DB/'
 snapshot_db = 'VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/'
 
+# Add conditions for claims diagnosis
+conditions = ["diabetes", "obese", "obesity", "adiposity"]
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong>Load and filter tables</strong>
+
+# COMMAND ----------
+
 #tposs_client = spark.read.parquet(f"{pro_Path}{posstg_db}TPOSS_CLIENT/")
 tap_client_details = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_DETAILS/")
 tap_client_add_info = spark.read.parquet(f"{pro_Path}{posstg_db}TAP_CLIENT_ADD_INFO")
@@ -36,6 +58,9 @@ tclaim_details = spark.read.parquet(f"{pro_Path}{snapshot_db}TCLAIM_DETAILS/")
 tclaim_diag = spark.read.parquet(f"{pro_Path}{cas_db}TCLM_DIAGNOSIS/")
 tporidm = spark.read.parquet(f"{cur_Path}{datamart_db}TPORIDM_MTHEND/")
 tcoverages = spark.read.parquet(f"{pro_Path}{snapshot_db}TCOVERAGES/")
+tpolidm = spark.read.parquet(f"{cur_Path}{datamart_db}TPOLIDM_MTHEND/")
+tagtdm = spark.read.parquet(f"{cur_Path}{datamart_db}TAGTDM_MTHEND/")
+tloc = spark.read.parquet(f"{cur_Path}{reports_db}LOC_TO_SM_MAPPING_HIST/")
 
 #tposs_client = tposs_client.toDF(*[col.lower() for col in tposs_client.columns])
 tap_client_details = tap_client_details.toDF(*[col.lower() for col in tap_client_details.columns])
@@ -43,16 +68,26 @@ tap_client_add_info = tap_client_add_info.toDF(*[col.lower() for col in tap_clie
 tclaim_details = tclaim_details.toDF(*[col.lower() for col in tclaim_details.columns])
 tclaim_diag = tclaim_diag.toDF(*[col.lower() for col in tclaim_diag.columns])
 tporidm = tporidm.toDF(*[col.lower() for col in tporidm.columns])
+tpolidm = tpolidm.toDF(*[col.lower() for col in tpolidm.columns])
+tagtdm = tagtdm.toDF(*[col.lower() for col in tagtdm.columns])
 tcoverages = tcoverages.toDF(*[col.lower() for col in tcoverages.columns])
 
 tclaim_details = tclaim_details.filter(col("image_date") == last_mthend)
 tporidm = tporidm.filter(col("image_date") == last_mthend)
+tpolidm = tpolidm.filter(col("image_date") == last_mthend)
+tagtdm = tagtdm.filter(col("image_date") == last_mthend)
 tcoverages = tcoverages.filter(col("image_date") == last_mthend)
+tloc = tloc.filter(col("image_date") == last_mthend)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <strong>Itermediate tables</strong>
+# MAGIC ###Itermediate tables
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong> Clients' health metrics (height, weight, conditions...)</strong>
 
 # COMMAND ----------
 
@@ -176,17 +211,17 @@ tclaim_df = tclaim_details.filter(
         )\
         .select(
             "cli_num",
-            "clm_id"
-        )\
-        .where(
-            lower(col("diag_nm_eng")).contains("diabetes") |
-            lower(col("diag_nm_eng")).contains("obese") |
-            lower(col("diag_nm_eng")).contains("obesity") |
-            lower(col("diag_nm_eng")).contains("adiposity")
+            "clm_id",
+            lower(col("diag_nm_eng")).alias("condition")
         )
+        
+tclaim_obese_df = tclaim_df.where(
+    reduce(lambda a, b: a | b, [lower(col("diag_nm_eng")).contains(c) for c in conditions])
+    )
 
 # Get list of customers who've submitted claims since 2021
 tclaim_sum_df = tclaim_df.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
+tclaim_sum_df_filtered = tclaim_df_filtered.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
 
 # Get list of Active customers
 tcov_sum_df = tcoverages.withColumn("status", when(col("cvg_stat_cd").isin(["1","2","3","5"]), "Active").otherwise("Inactive")) \
@@ -202,9 +237,10 @@ tsmkr_df = tcoverages.filter(col("smkr_code") == "S") \
                        "smkr_code") \
                 .dropDuplicates()
 
-print("#'s tap_client_final_df records:", tap_client_final_df.count())
-print("#'s tclaim_sum_df records:", tclaim_sum_df.count())
-print("#'s tcov_sum_df:", tporidm_sum_df.count())
+print("#'s tap_client_final_df:", tap_client_final_df.count())
+print("#'s tclaim_sum_df:", tclaim_sum_df.count())
+print("#'s tclaim_obese_df: ", tclaim_obese_df.count())
+print("#'s tcov_sum_df:", tcov_sum_df.count())
 print("#'s tsmkr_df:", tsmkr_df.count())
 
 # COMMAND ----------
@@ -216,7 +252,7 @@ print("#'s tsmkr_df:", tsmkr_df.count())
 
 tap_client_final_df.createOrReplaceTempView("tap_client_final")
 tclaim_sum_df.createOrReplaceTempView("tclaim_sum")
-tporidm_sum_df.createOrReplaceTempView("tporidm_sum")
+tcov_sum_df.createOrReplaceTempView("tcov_sum")
 tsmkr_df.createOrReplaceTempView("tsmkr")
 
 final_df = spark.sql("""
@@ -228,10 +264,11 @@ final_df = spark.sql("""
             tap.first_height,
             tap.first_weight,
             tap.first_bmi, 
-            case when tap.first_bmi < 18.5 then "Under-weight"
-                 when tap.first_bmi between 18.5 and 25 then "Normal"
-                 when tap.first_bmi between 25 and 30 then "Over-weight"
-                 when tap.first_bmi > 30 then "Obese"
+            case when tap.first_bmi < 18.5 then "Underweight"
+                 when tap.first_bmi between 18.5 and 22.9 then "Normal"
+                 when tap.first_bmi >= 23 and tap.first_bmi < 25 then "Overweight"
+                 when tap.first_bmi >= 25 and tap.first_bmi < 30 then "Obesity Level 1"
+                 else "Obesity Level 2"
             end as first_bmi_cat,
             tap.last_age,
             case when tap.last_age < 20 then "01. <20yo"
@@ -249,15 +286,16 @@ final_df = spark.sql("""
             tap.last_weight,
             tap.last_bmi,
             case when tap.last_bmi < 18.5 then "Under-weight"
-                 when tap.last_bmi between 18.5 and 25 then "Normal"
-                 when tap.last_bmi between 25 and 30 then "Over-weight"
-                 when tap.last_bmi > 30 then "Obese"
+                 when tap.last_bmi between 18.5 and 22.9 then "Normal"
+                 when tap.last_bmi >= 23 and tap.last_bmi < 25 then "Overweight"
+                 when tap.last_bmi >= 25 and tap.last_bmi < 30 then "Obesity Level 1"
+                 else "Obesity Level 2"
             end as last_bmi_cat,
             nvl(tclm.number_of_claims, 0) as number_of_claims,
             tcov.status,
             case when tsmkr.cli_num is not null then 'Smoker' else 'Non-smoker' end as smkr_cat
     from    tap_client_final tap inner join
-            tporidm_sum tcov on tap.cli_num=tcov.cli_num left join
+            tcov_sum tcov on tap.cli_num=tcov.cli_num left join
             tclaim_sum tclm on tap.cli_num=tclm.cli_num left join
             tsmkr on tap.cli_num=tsmkr.cli_num             
 """)
