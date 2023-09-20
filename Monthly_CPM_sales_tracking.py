@@ -12,6 +12,15 @@
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC <strong>Load defined functions</strong>
+
+# COMMAND ----------
+
+# MAGIC %run "/Repos/dung_nguyen_hoang@mfcgd.com/Utilities/Functions"
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC <strong>Initialize libl, params and tables</strong>
 
 # COMMAND ----------
@@ -44,50 +53,26 @@ print("rpt_mth:",rpt_mth)
 
 # COMMAND ----------
 
-targetm_dm = spark.read.parquet("abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/TARGETM_DM/")
-trackingm = spark.read.parquet("abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/TRACKINGM/")
-#campp = spark.read.parquet("abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Staging/Incremental/VN_PUBLISHED_CAMPAIGN_FILEBASED_DB/CAMPP/")
-aws_cpm_daily = spark.read.parquet("abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_ADOBE_PWS_DB/AWS_CPM_DAILY/")
+cpm_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/'
+aws_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_ADOBE_PWS_DB/'
 
-aws_cpm_daily = aws_cpm_daily.filter(col("month_dt") == rpt_mth)
+tbl_path1 = 'TARGETM_DM/'
+tbl_path2 = 'TRACKINGM/'
+tbl_path3 = 'AWS_CPM_DAILY/'
 
-# Create temp view for the tables
-targetm_dm.createOrReplaceTempView("targetm_dm")
-trackingm.createOrReplaceTempView("trackingm")
-#campp.createOrReplaceTempView("campp")
-aws_cpm_daily.createOrReplaceTempView("aws_cpm_daily")
+path_list = [cpm_path,aws_path]
+tbl_list = [tbl_path1,tbl_path2,tbl_path3]
 
-print("targetm_dm:", targetm_dm.count())
-print("trackingm:", trackingm.count())
-print("aws_cpm_daily:", aws_cpm_daily.count())
+df_list = {}
+cpm_df = load_parquet_files(cpm_path,tbl_list)
+aws_df = load_parquet_files(aws_path,tbl_list)
+
+df_list.update(cpm_df)
+df_list.update(aws_df)
 
 # COMMAND ----------
 
-# Validate values
-trackingm_sample = spark.sql(""" 
-select  cmpgn_id, btch_id,
-		tgt_id,
-		new_pol_num, 
-		new_pol_cvg_typ, 
-		new_pol_plan_cd, 
-		new_pol_cust_id, 
-		new_pol_insrd_id, 
-		new_pol_writing_agt,
-		new_cvg_stat,
-		new_pol_sbmt_dt,
-		new_cvg_iss_dt,
-		new_cvg_eff_dt,
-		new_pol_ape,
-		new_pol_nbv,
-		lead_gen_ind
-from    trackingm
-where   btch_id NOT LIKE '9%'
-	and new_cvg_stat NOT IN ('8','A','N','R','X')
-	and SUBSTR(new_pol_plan_cd,1,3) NOT IN ('FDB','BIC','PN0')
-    and cmpgn_id in ('MIL-AVY-20230101','MIL-MAT-20230101','MIL-UCM-20230101')      
-    and substr(to_date(new_cvg_iss_dt),1,7)='2023-07'
-""")
-#trackingm_sample.orderBy('tgt_id', 'new_pol_num', 'new_pol_plan_cd').display()
+generate_temp_view(df_list)
 
 # COMMAND ----------
 
@@ -192,9 +177,6 @@ FROM	(SELECT	CASE
 								trk.new_pol_nbv,
 								trk.lead_gen_ind
 						 FROM	TRACKINGM trk
-							--INNER JOIN
-							--	CAMPP cpp
-							--ON	trk.cmpgn_id=cpp.cmpgn_id AND trk.btch_id=cpp.btch_id
 						 WHERE	trk.cmpgn_id NOT LIKE 'CTR%'	-- exclude LP
 							AND	trk.cmpgn_id NOT LIKE '%RAND%'	-- exclude 10% Random HP
 							AND	trk.cmpgn_ID NOT LIKE '%POC%'	-- exclude POC campaign
@@ -235,7 +217,7 @@ FROM	(SELECT	CASE
 						 lateral view explode (cmpgn_id_list) cmpgn_id_list as cpmid
 						 GROUP BY cpmid) b
 					 ON	a.cpmid=b.cpmid	
-				WHERE	a.hit_date BETWEEN '{iss_st_dt}' AND '{iss_ed_dt}'
+				WHERE	TO_DATE(a.hit_date) BETWEEN '{iss_st_dt}' AND '{iss_ed_dt}'
 				) aws
 			ON	tgt.TGT_ID = aws.TGT_ID AND tgt.CMPGN_ID = aws.CPMID
 		WHERE	SUBSTR(tgt.cmpgn_id,1,3) = 'MIL'
@@ -253,6 +235,8 @@ GROUP BY
 		CAMPAIGN_NAME
 HAVING CAMPAIGN_NAME <> 'Others'                                
 """)
+
+huamin_monthly_data = huamin_monthly_data.toDF(*[col.lower() for col in huamin_monthly_data.columns])
 
 # COMMAND ----------
 

@@ -201,34 +201,55 @@ tap_client_final_df = tap_client_df.select(
     "last_bmi"
 ).dropDuplicates(["cli_num"])
 
+print("#'s tap_client_final_df:", tap_client_final_df.count())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong>Customers' claims and status</strong>
+
+# COMMAND ----------
+
 tclaim_df = tclaim_details.filter(
     (col("clm_stat_code").isin(["A","D"])) &
     (col("clm_code").isin(["3","7","8","11","27","28","29"]))).alias("tclm")\
         .join(
             tclaim_diag.alias("tdg"),
             on=col("tclm.clm_diagnosis") == col("tdg.diag_code"),
-            how="inner"
+            how="left"
         )\
         .select(
             "cli_num",
             "clm_id",
             lower(col("diag_nm_eng")).alias("condition")
-        )
-        
+        )\
+        .where(col("clm_recv_dt") >= '2020-01-01')
+
+# Identify obesity
+tclaim_df = tclaim_df.withColumn(
+    "obesity_ind",
+    when(tclaim_df["condition"].isin(conditions), 1).otherwise(0)
+)
+
+# Select only obese customers
 tclaim_obese_df = tclaim_df.where(
     reduce(lambda a, b: a | b, [lower(col("diag_nm_eng")).contains(c) for c in conditions])
     )
 
-# Get list of customers who've submitted claims since 2021
-tclaim_sum_df = tclaim_df.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
-tclaim_sum_df_filtered = tclaim_df_filtered.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
+# Get list of customers who've submitted claims since 2020
+tclaim_sum_df = tclaim_df.groupBy(col("cli_num"))\
+    .agg(
+        countDistinct("clm_id").alias("number_of_claims"),
+        max("obesity_ind").alias("obesity_ind")
+        )
+#tclaim_sum_df_filtered = tclaim_df_filtered.groupBy(col("cli_num")).agg(countDistinct("clm_id").alias("number_of_claims"))
 
-# Get list of Active customers
+# Get list of Active customers whose policies issued since 2020
 tcov_sum_df = tcoverages.withColumn("status", when(col("cvg_stat_cd").isin(["1","2","3","5"]), "Active").otherwise("Inactive")) \
                         .groupBy(col("cli_num")) \
                         .agg(min("cvg_eff_dt").alias("first_eff_dt"), 
                              min("status").alias("status")) \
-                        .where(col("first_eff_dt") >= "2021-01-01") \
+                        .where(col("first_eff_dt") >= "2020-01-01") \
                         .dropDuplicates()
 
 # Get list of Smokers
@@ -237,11 +258,42 @@ tsmkr_df = tcoverages.filter(col("smkr_code") == "S") \
                        "smkr_code") \
                 .dropDuplicates()
 
-print("#'s tap_client_final_df:", tap_client_final_df.count())
 print("#'s tclaim_sum_df:", tclaim_sum_df.count())
-print("#'s tclaim_obese_df: ", tclaim_obese_df.count())
+print("#'s obese_ind: ", tclaim_sum_df.filter(col("obesity_ind") != 0).count())
 print("#'s tcov_sum_df:", tcov_sum_df.count())
 print("#'s tsmkr_df:", tsmkr_df.count())
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong>Find latest serving agents for each customer</strong>
+
+# COMMAND ----------
+
+tpolidm.createOrReplaceTempView("tpolidm")
+tagtdm.createOrReplaceTempView("tagtdm")
+tloc.createOrReplaceTempView("tloc")
+
+tcus_loc = spark.sql("""           
+with lst_agt as (
+    select  po_num, sa_code as agt_code,
+            row_number() over (partition by po_num order by pol_iss_dt desc, pol_num desc) rn
+    from    tpolidm
+    where   pol_stat_cd in ('1','2','3','5')
+)
+select  lst_agt.po_num,
+        lst_agt.agt_code,
+        agt.loc_cd,
+        tloc.rh_code,
+        tloc.rh_name
+from    lst_agt inner join
+        tagtdm agt on lst_agt.agt_code = agt.agt_code left join
+        tloc on agt.loc_cd = tloc.loc_cd
+where   lst_agt.rn = 1             
+""")
+
+tcus_loc = tcus_loc.dropDuplicates(["po_num"])
+print("#'s tcus_loc:", tcus_loc.count())
 
 # COMMAND ----------
 
@@ -254,6 +306,7 @@ tap_client_final_df.createOrReplaceTempView("tap_client_final")
 tclaim_sum_df.createOrReplaceTempView("tclaim_sum")
 tcov_sum_df.createOrReplaceTempView("tcov_sum")
 tsmkr_df.createOrReplaceTempView("tsmkr")
+tcus_loc.createOrReplaceTempView("tcus_loc")
 
 final_df = spark.sql("""
     select  tap.cli_num,
@@ -292,15 +345,20 @@ final_df = spark.sql("""
                  else "Obesity Level 2"
             end as last_bmi_cat,
             nvl(tclm.number_of_claims, 0) as number_of_claims,
+            nvl(tclm.obesity_ind, 0) as obesity_ind,
             tcov.status,
-            case when tsmkr.cli_num is not null then 'Smoker' else 'Non-smoker' end as smkr_cat
+            case when tsmkr.cli_num is not null then 'Smoker' else 'Non-smoker' end as smkr_cat,
+            tcus_loc.rh_code,
+            tcus_loc.rh_name
     from    tap_client_final tap inner join
             tcov_sum tcov on tap.cli_num=tcov.cli_num left join
             tclaim_sum tclm on tap.cli_num=tclm.cli_num left join
-            tsmkr on tap.cli_num=tsmkr.cli_num             
+            tsmkr on tap.cli_num=tsmkr.cli_num left join
+            tcus_loc on tap.cli_num=tcus_loc.po_num        
 """)
 
-print("#'s final_df records:", final_df.count())
+print("#'s Universe records:", final_df.count())
+print("#'s Active records:", final_df.where(col("status") == "Active").count())
 
 # COMMAND ----------
 
@@ -328,7 +386,7 @@ cus_metrics = spark.read.parquet(f"{lab_Path}CUS_METRICS").toPandas()
 # Add exclusion rules here
 cus_metrics_filtered = cus_metrics[(cus_metrics["last_age_cat"] != "01. <20yo") & 
                                    (cus_metrics["status"] == "Active") &
-                                   (cus_metrics["last_bmi_cat"].isin(["Over-weight", "Obese"]))]
+                                   (~cus_metrics["last_bmi_cat"].isin(["Under-weight", "Normal"]))]
 
 display(cus_metrics_filtered)
 # Plotting the distribution of (status, last_bmi_cat)
@@ -356,23 +414,22 @@ display(cus_metrics_filtered)
 
 # COMMAND ----------
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 # Normalizing the data to show percentages
-all_bmi_filtered = cus_metrics_filtered.groupby(['last_age_cat', 'gender', 'smkr_cat', 'last_bmi_cat']).size().reset_index(name='counts')
+all_bmi_filtered = cus_metrics_filtered.groupby(['rh_name', 'last_age_cat', 'gender', 'smkr_cat', 'last_bmi_cat']).size().reset_index(name='counts')
 all_bmi_filtered['percent'] = all_bmi_filtered['counts'] / all_bmi_filtered['counts'].sum()
+## Calculate the % of customers submitting obesity related claims
+#all_bmi_filtered['obese_clm_percent'] = all_bmi_filtered[all_bmi_filtered['obesity_ind'] == 1]['counts'] / all_bmi_filtered['counts'].sum()
 
-gender_bmi_unfiltered = cus_metrics.groupby(['status', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
+gender_bmi_unfiltered = cus_metrics.groupby(['status', 'gender', 'rh_name', 'last_bmi_cat']).size().reset_index(name='counts')
 gender_bmi_unfiltered['percent'] = gender_bmi_unfiltered['counts'] / gender_bmi_unfiltered['counts'].sum()
 
-gender_bmi_filtered = cus_metrics_filtered.groupby(['status', 'gender', 'last_bmi_cat']).size().reset_index(name='counts')
+gender_bmi_filtered = cus_metrics_filtered.groupby(['status', 'gender', 'rh_name', 'last_bmi_cat']).size().reset_index(name='counts')
 gender_bmi_filtered['percent'] = gender_bmi_filtered['counts'] / gender_bmi_filtered['counts'].sum()
 
-age_bmi_unfiltered = cus_metrics.groupby(['status', 'last_age_cat', 'last_bmi_cat']).size().reset_index(name='counts')
+age_bmi_unfiltered = cus_metrics.groupby(['status', 'last_age_cat', 'rh_name', 'last_bmi_cat']).size().reset_index(name='counts')
 age_bmi_unfiltered['percent'] = age_bmi_unfiltered['counts'] / age_bmi_unfiltered['counts'].sum()
 
-age_bmi_filtered = cus_metrics_filtered.groupby(['status', 'last_age_cat', 'last_bmi_cat']).size().reset_index(name='counts')
+age_bmi_filtered = cus_metrics_filtered.groupby(['status', 'last_age_cat', 'rh_name', 'last_bmi_cat']).size().reset_index(name='counts')
 age_bmi_filtered['percent'] = age_bmi_filtered['counts'] / age_bmi_filtered['counts'].sum()
 
 # Plotting the distribution of (gender, last_bmi_cat) in terms of percentages

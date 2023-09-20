@@ -10,15 +10,36 @@
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC <strong>Load libls</strong>
+
+# COMMAND ----------
+
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC <strong>Initialize tables and params</strong>
 
 # COMMAND ----------
 
-rpt_yr = 2023
+x = 0 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
+today = datetime.now()
+first_day_of_current_month = today.replace(day=1)
+current_month = first_day_of_current_month
+
+for i in range(x):
+    first_day_of_previous_month = current_month - timedelta(days=1)
+    first_day_of_previous_month = first_day_of_previous_month.replace(day=1)
+    current_month = first_day_of_previous_month
+
+last_day_of_x_months_ago = current_month - timedelta(days=1)
+last_mthend = last_day_of_x_months_ago.strftime('%Y-%m-%d')
+rpt_yr = last_mthend[0:4]
+rpt_mth = last_mthend[2:4]+last_mthend[5:7]
 lmth = -1
 llmth = -2
-rpt_mth = 2307
-rpt_prv_mth = 2306
 exclusion_list_full = []
 exclusion_list_sub = ['MI007','PA007','PA008']
 active_sts = ['1','2','3','5']
