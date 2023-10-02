@@ -1,6 +1,6 @@
 SET hivevar:exRate = 23145;	-- make sure to check against CPM Tracking dashboard
 SET hivevar:start_date = '2023-01-01';
-SET hivevar:end_date = '2023-05-31';
+SET hivevar:end_date = '2023-06-30';
 
 SELECT	YEAR(trk.NEW_CVG_ISS_DT) year,
 		tgt.cmpgn_id cmpgn_id,
@@ -72,9 +72,8 @@ FROM	vn_published_campaign_db.targetm_dm tgt
 				 	AND	trk.new_cvg_stat NOT IN ('8','A','N','R','X')
 					AND trk.tgt_id IS NOT NULL
 					AND	SUBSTR(trk.new_pol_plan_cd,1,3) NOT IN ('FDB','BIC','PN0')
-					AND	(trk.new_cvg_iss_dt BETWEEN ${start_date} AND ${end_date}
-					  OR trk.new_cvg_eff_dt BETWEEN ${start_date} AND ${end_date})
-				 	--AND	trk.new_cvg_iss_dt>='2021-01-01'
+					AND	((trk.new_pol_cvg_typ='B' AND trk.new_cvg_iss_dt BETWEEN cpp.offr_st_dt AND ${end_date})
+					  OR (trk.new_pol_cvg_typ<>'B' AND trk.new_cvg_eff_dt BETWEEN cpp.offr_st_dt AND ${end_date}))
 				) a
 		) TRK
 	ON	TGT.TGT_ID = TRK.TGT_ID --AND TGT.CMPGN_ID = TRK.CMPGN_ID

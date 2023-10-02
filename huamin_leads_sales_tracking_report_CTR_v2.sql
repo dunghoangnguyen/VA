@@ -1,5 +1,5 @@
-SET hivevar:iss_st_dt='2023-03-01';	-- first date of sales tracking
-SET hivevar:iss_ed_dt='2023-03-31'; -- last date of sales tracking period
+SET hivevar:iss_st_dt='2023-06-01';	-- first date of sales tracking
+SET hivevar:iss_ed_dt='2023-06-30'; -- last date of sales tracking period
 SET hivevar:lead_dt='2023-01-01';
 
 SELECT	CAMPAIGN_NAME,

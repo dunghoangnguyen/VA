@@ -1,6 +1,6 @@
 SET hivevar:exRate = 23145;	-- make sure to check against CPM Tracking dashboard
 SET hivevar:start_date = '2023-01-01';
-SET hivevar:end_date = '2023-05-31';	-- update on May 9th 2023
+SET hivevar:end_date = '2023-09-30';	-- update on May 9th 2023
 
 SELECT	YEAR(trk.NEW_CVG_ISS_DT) year,
 		tgt.cmpgn_id cmpgn_id,
@@ -65,16 +65,16 @@ FROM	vn_published_campaign_db.targetm_dm tgt
 					ON	trk.cmpgn_id=cpp.cmpgn_id AND trk.btch_id=cpp.btch_id
 		 		 WHERE	trk.cmpgn_id NOT LIKE 'CTR-%'
 					AND trk.btch_id NOT LIKE '9%'
-				 	--AND	trk.lead_gen_ind=1
+				 	--AND	trk.assign_agent_ind=1
 				 	AND	trk.new_cvg_stat IS NOT NULL
 				 	AND	trk.new_cvg_stat NOT IN ('8','A','N','R','X')
 					AND trk.tgt_id IS NOT NULL
 					AND	trk.new_pol_plan_cd NOT IN ('FDB01','BIC01','BIC02','BIC03','BIC04','PN001')
-					AND	((trk.new_pol_cvg_typ='B' AND trk.new_cvg_iss_dt BETWEEN ${start_date} AND ${end_date})
-					  OR (trk.new_pol_cvg_typ<>'B' AND trk.new_cvg_eff_dt BETWEEN ${start_date} AND ${end_date}))
+					AND	((trk.new_pol_cvg_typ='B' AND trk.new_cvg_iss_dt BETWEEN cpp.offr_st_dt AND ${end_date})
+					  OR (trk.new_pol_cvg_typ<>'B' AND trk.new_cvg_eff_dt BETWEEN cpp.offr_st_dt AND ${end_date}))
 				) a
 		) TRK
-	ON	TGT.TGT_ID = TRK.TGT_ID --AND TGT.CMPGN_ID = TRK.CMPGN_ID
+	ON	TGT.TGT_ID = TRK.TGT_ID
 	LEFT JOIN
   	(SELECT	pol_num,
 	 	'B' as cvg_typ,
@@ -98,13 +98,12 @@ FROM	vn_published_campaign_db.targetm_dm tgt
 WHERE	SUBSTR(tgt.cmpgn_id,1,3) = 'MIL'
 	AND	SUBSTR(tgt.cmpgn_id,9,3) NOT IN ('POC','RAN')
 	AND (trk.rn	= 1 OR trk.rn IS NULL) 
-	--AND	tgt.batch_start_date >= ${start_date} --BETWEEN '2019-10-01' AND '2021-12-31'
+	AND	tgt.batch_start_date >= ${start_date} --BETWEEN '2019-10-01' AND '2021-12-31'
 	AND tgt.target_channel='Agency'
 	AND tgt.btch_id NOT LIKE '9%'		-- [Exclude UCM of the existing campaign]		
 GROUP BY
 		YEAR(trk.NEW_CVG_ISS_DT),
 		tgt.cmpgn_id
---HAVING year<2022
 ORDER BY
 		year,
 		cmpgn_name;

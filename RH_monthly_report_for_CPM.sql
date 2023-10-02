@@ -1,5 +1,5 @@
 SET hivevar:st_dt='2023-01-01';
-SET hivevar:ed_dt='2023-05-31';
+SET hivevar:ed_dt='2023-06-30';
 SET hivevar:lead_yr=2023;
 
 ----- CPM Region -----
