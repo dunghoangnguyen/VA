@@ -1,4 +1,8 @@
 # Databricks notebook source
+# MAGIC %run "Repos/dung_nguyen_hoang@mfcgd.com/Utilities/Functions"
+
+# COMMAND ----------
+
 from pyspark.sql import SparkSession
 from pyspark.dbutils import DBUtils
 from pyspark.sql.functions import *
@@ -54,6 +58,7 @@ tporidm_mthend_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Cu
 vn_plan_code_map_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/VN_PLAN_CODE_MAP/'
 tclaim_quota_edit_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCLAIM_QUOTA_EDIT/'
 tcoverages_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCOVERAGES/'
+output_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/'
 
 # Load file and store into Spark dataframe
 tpos_collection_df = spark.read.format("parquet").load(tpos_collection_path)
@@ -93,19 +98,6 @@ tpolidm_mthend_df = tpolidm_mthend_df.filter(col("image_date") == last_mthend)
 tcustdm_mthend_df = tcustdm_mthend_df.filter(col("image_date") == last_mthend)
 tagtdm_mthend_df = tagtdm_mthend_df.filter(col("image_date") == last_mthend)
 tporidm_mthend_df = tporidm_mthend_df.filter(col("image_date") == last_mthend)
-
-print("Number of records in tpos_collection: ", tpos_collection_df.filter(col("image_date") == last_mthend).count())
-#print("Number of records in tclaims_conso_all: ", tclaims_conso_all_df.count())
-#print("Number of records in tpolicys: ", tpolicys_df.count())
-#print("Number of records in tclient_policy_links: ", tclient_policy_links_df.count())
-#print("Number of records in tclient_details: ", tclient_details_df.count())
-print("Number of records in tpolidm_mthend: ", tpolidm_mthend_df.count())
-print("Number of records in tcustdm_mthend: ", tcustdm_mthend_df.count())
-print("Number of records in tagtdm_mthend: ", tagtdm_mthend_df.count())
-print("Number of records in tporidm_mthend: ", tporidm_mthend_df.count())
-#print("Number of records in vn_plan_code_map: ", vn_plan_code_map_df.count())
-#print("Number of records in tclaim_quota_edit_df: ", tclaim_quota_edit_df.count())
-#print("Number of records in tcoverages_df: ", tcoverages_df.count())
 
 # COMMAND ----------
 
@@ -825,14 +817,11 @@ newcustomer_yr = tpolidm_mthend_df.alias("a") \
 
 # COMMAND ----------
 
-customer_table_final.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/customer_table_{rpt_mth}")
-att_cus_final.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/att_cus_{rpt_mth}")
-policy_base.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/policy_base_{rpt_mth}")
-product_table.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/product_table_{rpt_mth}")
-cuslist_yr.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/cuslist_{rpt_yr}")
-newcustomer_mth.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_mth}")
-newcustomer_yr.write.mode("overwrite").parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_yr}")
-
-# COMMAND ----------
-
-
+customer_table_final.write.mode("overwrite").parquet(f"{output_path}customer_table_{rpt_mth}")
+att_cus_final.write.mode("overwrite").parquet(f"{output_path}att_cus_{rpt_mth}")
+policy_base.write.mode("overwrite").parquet(f"{output_path}policy_base_{rpt_mth}")
+product_table.write.mode("overwrite").parquet(f"{output_path}product_table_{rpt_mth}")
+product_table_summary.write.mode("overwrite").parquet(f"{output_path}product_table_summary_{rpt_mth}")
+cuslist_yr.write.mode("overwrite").parquet(f"{output_path}cuslist_{rpt_yr}")
+newcustomer_mth.write.mode("overwrite").parquet(f"{output_path}newcustomer_{rpt_mth}")
+newcustomer_yr.write.mode("overwrite").parquet(f"{output_path}newcustomer_{rpt_yr}")

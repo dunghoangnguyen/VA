@@ -607,6 +607,8 @@ df_tmp.loc['Avg Increased APE in 6 month'] = df_tmp.loc['Avg Increased APE in 6 
 df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Cus Repurchased in 6 Mth','Move Incremental'] = '-'
 
+df_spark = spark.createDataFrame(df_tmp)
+df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/MOVE_Xsell_{current_mth[:7]}.csv', header=True)
 df_tmp
 
 # COMMAND ----------
@@ -657,9 +659,5 @@ df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Lapsed','Move Incremental'] = '-'
 
 df_spark = spark.createDataFrame(df_tmp)
-df_spark.write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
+df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
 df_tmp
-
-# COMMAND ----------
-
-
