@@ -63,11 +63,11 @@ att_cus = spark.read.parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows
 newcustomer_year = spark.read.parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_yr}")
 newcustomer = spark.read.parquet(f"abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/newcustomer_{rpt_mth}")
 
-print("customer_table:",customer_table.count())
-print("product_table:",product_table.count())
-print("policy_base:",policy_base.count())
-print("att_cus:",att_cus.count())
-print("newcustomer:",newcustomer.count())
+#print("customer_table:",customer_table.count())
+#print("product_table:",product_table.count())
+#print("policy_base:",policy_base.count())
+#print("att_cus:",att_cus.count())
+#print("newcustomer:",newcustomer.count())
 
 # COMMAND ----------
 

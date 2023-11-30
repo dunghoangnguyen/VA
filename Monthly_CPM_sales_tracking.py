@@ -55,11 +55,11 @@ print("rpt_mth:",rpt_mth)
 
 # COMMAND ----------
 
-cpm_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/'
-nbv_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CAMPAIGN_FILEBASED_DB/'
-aws_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_ADOBE_PWS_DB/'
-rpt_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_REPORTS_DB/'
-lab_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/'
+cpm_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/'
+nbv_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CAMPAIGN_FILEBASED_DB/'
+aws_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_ADOBE_PWS_DB/'
+rpt_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_REPORTS_DB/'
+lab_path = '/mnt/lab/vn/project/cpm/'
 
 tbl_path1 = 'TARGETM_DM/'
 tbl_path2 = 'TRACKINGM/'
@@ -194,8 +194,8 @@ huamin_monthly_data = huamin_monthly_data.toDF(*[col.lower() for col in huamin_m
 
 # COMMAND ----------
 
-huamin_monthly_data.coalesce(1).write.mode('overwrite').csv(f'{lab_path}Huamin_monthly_data')
-huamin_monthly_data.display()
+huamin_monthly_data.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}Huamin_monthly_data')
+#huamin_monthly_data.display()
 
 # COMMAND ----------
 
@@ -299,8 +299,8 @@ HAVING CAMPAIGN_NAME <> 'Others'
 """)
 
 huamin_CTR_data = huamin_CTR_data.toDF(*[col.lower() for col in huamin_CTR_data.columns])
-#huamin_CTR_data.coalesce(1).write.mode('overwrite').csv(f'{lab_path}Huamin_monthly_data')
-huamin_CTR_data.display()
+huamin_CTR_data.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}Huamin_monthly_data_CTR')
+#huamin_CTR_data.display()
 
 # COMMAND ----------
 
@@ -449,7 +449,7 @@ cpm_sales_tracking = tgtDF.alias('tgt')\
 
 # COMMAND ----------
 
-cpm_sales_tracking.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}cpm_executive_summary_by_year')
+#cpm_sales_tracking.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}cpm_executive_summary_by_year')
 cpm_sales_tracking.display()
 
 # COMMAND ----------
@@ -600,4 +600,4 @@ ctr_sales_tracking = tgtCTRDF.alias('tgt')\
 # COMMAND ----------
 
 ctr_sales_tracking.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}cpm_executive_summary_by_year_CTR')
-ctr_sales_tracking.display()
+#ctr_sales_tracking.display()
