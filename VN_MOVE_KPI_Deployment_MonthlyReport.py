@@ -35,6 +35,8 @@ import time
 
 # COMMAND ----------
 
+# output path
+out_path = '/dbfs/mnt/lab/vn/project/digital_kpi/MOVE/'
 # current month (all the behaviors before the 1st of current month would be considered)
 current_mth = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-01')
 #current_mth = '2023-08-01'
@@ -52,11 +54,14 @@ onboarding_mth = pd.to_datetime(current_mth)-relativedelta(months=repurchase_obs
 digital_list = ['BIC01','BIC02','BIC03','BIC04','FDB01','MCI1B','PN001']
 # when set to "Yes" will count digital products into 15 mth persistency, when set to 'No' will exclude digital products in persistency
 cnt_digital = 'No'
+# reporting month (to save file as)
+rpt_mth = snapshot_dt[2:4]+snapshot_dt[5:7]
 
 # Re-check all parameters
 print(f"current_mth: {current_mth}")
 print(f"snapshot_dt: {snapshot_dt}")
 print(f"onboarding_mth: {onboarding_mth}")
+print(f"rpt_mth: {rpt_mth}")
 
 # COMMAND ----------
 
@@ -607,8 +612,9 @@ df_tmp.loc['Avg Increased APE in 6 month'] = df_tmp.loc['Avg Increased APE in 6 
 df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Cus Repurchased in 6 Mth','Move Incremental'] = '-'
 
-df_spark = spark.createDataFrame(df_tmp)
-df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/MOVE_Xsell_{current_mth[:7]}.csv', header=True)
+#df_spark = spark.createDataFrame(df_tmp)
+#df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/MOVE_Xsell_{current_mth[:7]}.csv', header=True)
+df_tmp.to_csv(f'{out_path}MOVE_Xsell_{rpt_mth}.csv', index=False)
 df_tmp
 
 # COMMAND ----------
@@ -658,6 +664,7 @@ df_tmp.loc['Persistency Rate','Move Incremental'] = df_tmp.loc['Persistency Rate
 df_tmp.loc['# of Cus','Move Incremental'] = '-'
 df_tmp.loc['# of Lapsed','Move Incremental'] = '-'
 
-df_spark = spark.createDataFrame(df_tmp)
-df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
+#df_spark = spark.createDataFrame(df_tmp)
+#df_spark.coalesce(1).write.mode('overwrite').csv(f'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/digital_kpi/MOVE/VN_MOVE_Persistency_{current_mth[:7]}.csv', header=True)
+df_tmp.to_csv(f'{out_path}VN_MOVE_Persistency_{rpt_mth}.csv', index=False)
 df_tmp

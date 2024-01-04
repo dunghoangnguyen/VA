@@ -195,7 +195,7 @@ huamin_monthly_data = huamin_monthly_data.toDF(*[col.lower() for col in huamin_m
 # COMMAND ----------
 
 huamin_monthly_data.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}Huamin_monthly_data')
-#huamin_monthly_data.display()
+huamin_monthly_data.display()
 
 # COMMAND ----------
 
@@ -300,7 +300,7 @@ HAVING CAMPAIGN_NAME <> 'Others'
 
 huamin_CTR_data = huamin_CTR_data.toDF(*[col.lower() for col in huamin_CTR_data.columns])
 huamin_CTR_data.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}Huamin_monthly_data_CTR')
-#huamin_CTR_data.display()
+huamin_CTR_data.display()
 
 # COMMAND ----------
 
@@ -600,4 +600,4 @@ ctr_sales_tracking = tgtCTRDF.alias('tgt')\
 # COMMAND ----------
 
 ctr_sales_tracking.coalesce(1).write.mode('overwrite').option('header', 'true').csv(f'{lab_path}cpm_executive_summary_by_year_CTR')
-#ctr_sales_tracking.display()
+ctr_sales_tracking.display()
