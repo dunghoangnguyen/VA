@@ -418,4 +418,9 @@ adec_report.write.mode("overwrite").partitionBy("year_month").parquet(f"abfss://
 
 # COMMAND ----------
 
+# convert Spark DataFrame into a Pandas DataFrame
+adec_report_pd = adec_report.toPandas()
+
+# Write the Pandas DataFrame to a CSV file 
+adec_report_pd.to_csv(f"/dbfs/mnt/lab/vn/project/cpm/ADEC/ADEC_REPORT_{rpt_mth}.csv", index=False)
 
