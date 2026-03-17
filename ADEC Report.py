@@ -46,20 +46,19 @@ print("rpt_mth =", rpt_mth)
 # COMMAND ----------
 
 # Set path to Azure parquet files
-tpos_collection_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_REPORTS_DB/TPOS_COLLECTION/'
-tclaims_conso_all_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_REPORTS_DB/TCLAIMS_CONSO_ALL/'
-tpolicys_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TPOLICYS/'
-tclient_policy_links_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TCLIENT_POLICY_LINKS/'
-tclient_details_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TCLIENT_DETAILS/'
-tpolidm_mthend_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_DATAMART_DB/TPOLIDM_MTHEND/'
-tcustdm_mthend_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_DATAMART_DB/TCUSTDM_MTHEND/'
-#'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/datamarts/TCUSTDM_MTHEND/'
-tagtdm_mthend_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_DATAMART_DB/TAGTDM_MTHEND/'
-tporidm_mthend_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_DATAMART_DB/TPORIDM_MTHEND/'
-vn_plan_code_map_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/VN_PLAN_CODE_MAP/'
-tclaim_quota_edit_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCLAIM_QUOTA_EDIT/'
-tcoverages_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCOVERAGES/'
-output_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/cpm/ADEC/WorkingData/'
+tpos_collection_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_REPORTS_DB/TPOS_COLLECTION/'
+tclaims_conso_all_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_REPORTS_DB/TCLAIMS_CONSO_ALL/'
+tpolicys_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TPOLICYS/'
+tclient_policy_links_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TCLIENT_POLICY_LINKS/'
+tclient_details_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/TCLIENT_DETAILS/'
+tpolidm_mthend_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_DATAMART_DB/TPOLIDM_MTHEND/'
+tcustdm_mthend_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_DATAMART_DB/TCUSTDM_MTHEND/'
+tagtdm_mthend_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_DATAMART_DB/TAGTDM_MTHEND/'
+tporidm_mthend_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_DATAMART_DB/TPORIDM_MTHEND/'
+vn_plan_code_map_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/VN_PLAN_CODE_MAP/'
+tclaim_quota_edit_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCLAIM_QUOTA_EDIT/'
+tcoverages_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CAS_DB/TCOVERAGES/'
+output_path = '/mnt/lab/vn/project/cpm/ADEC/WorkingData/'
 
 # Load file and store into Spark dataframe
 tpos_collection_df = spark.read.format("parquet").load(tpos_collection_path)
@@ -93,8 +92,6 @@ tcoverages_df = tcoverages_df.toDF(*[col.lower() for col in tcoverages_df.column
 tpolicys_df = tpolicys_df.filter(col("image_date") == last_mthend)
 tclient_policy_links_df = tclient_policy_links_df.filter(col("image_date") == last_mthend)
 tclient_details_df = tclient_details_df.filter(col("image_date") == last_mthend)
-#tpos_collection_df = tpos_collection_df.filter(col("image_date") == last_mthend)
-#tclaims_conso_all_df = tclaims_conso_all_df.filter(col("reporting_date") == last_mthend)
 tpolidm_mthend_df = tpolidm_mthend_df.filter(col("image_date") == last_mthend)
 tcustdm_mthend_df = tcustdm_mthend_df.filter(col("image_date") == last_mthend)
 tagtdm_mthend_df = tagtdm_mthend_df.filter(col("image_date") == last_mthend)
@@ -295,6 +292,7 @@ tpolidm_mthend_df.createOrReplaceTempView("tpolidm_mthend")
 tagtdm_mthend_df.createOrReplaceTempView("tagtdm_mthend")
 tcustdm_mthend_df.createOrReplaceTempView("tcustdm_mthend")
 vn_plan_code_map_dedup.createOrReplaceTempView("vn_plan_code_map_dedup")
+
 # Policy base
 policy_base = spark.sql(f"""
 select distinct	
@@ -357,15 +355,15 @@ select distinct
 	,cus.mobl_phon_num
 from
 	tpolidm_mthend pol
-	left join tagtdm_mthend  agt on (pol.wa_code = agt.agt_code and pol.image_date=agt.image_date)
+	left join tagtdm_mthend  agt on (pol.wa_code = agt.agt_code and pol.image_date = agt.image_date)
     left join tcustdm_mthend cus on (pol.po_num = cus.cli_num and pol.image_date = cus.image_date)
     left join vn_plan_code_map_dedup pln on (pol.plan_code = pln.plan_code)	
 where
 	pol.pol_eff_dt <= '{last_mthend}'
 	and pol.pol_stat_cd in ('1','2','3','5')
 	and pol.plan_code not in ('MI007','PA007','PA008')
-	and pol.image_date = '{last_mthend}'
-order by pol.pol_num,frst_iss_dt                     
+	--and to_date(pol.image_date) = '{last_mthend}'
+order by pol.pol_num, frst_iss_dt                     
 """)
 policy_base = policy_base.toDF(*[col.lower() for col in policy_base.columns])
 #print("Number of records in policy_base:", policy_base.count())
@@ -616,7 +614,6 @@ customer_table_final = customer_base_all.alias("a") \
         "a.mobl_phon_num"
     ).distinct()
 #print("Number of records in customer_table_final:", customer_table_final.count())
-#customer_table_final.display(10)
 
 # COMMAND ----------
 

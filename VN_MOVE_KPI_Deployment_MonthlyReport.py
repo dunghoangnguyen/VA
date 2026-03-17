@@ -87,7 +87,7 @@ df_moveid = moveid.select(
     )\
     .repartition('userid')
 df_moveid = df_moveid.groupBy('userid').agg(max('keyid').alias('keyid'))
-print("Number of records and columns in df_moveid:", df_moveid.count(),",", len(df_moveid.columns))
+#print("Number of records and columns in df_moveid:", df_moveid.count(),",", len(df_moveid.columns))
 #df_moveid.display(10)
 
 # COMMAND ----------
@@ -117,7 +117,7 @@ df_movekey = df_movekey.withColumn('po_num', expr("substring(key_value, 2)"))
 df_movekey = df_movekey.filter(col('created_date') <= snapshot_dt)
 
 df_move = df_moveid.join(df_movekey, on='keyid', how='inner').dropDuplicates()
-print("Number of records and columns in df_move: ", df_move.count(),",", len(df_move.columns))
+#print("Number of records and columns in df_move: ", df_move.count(),",", len(df_move.columns))
 #df_move.display(10)
 
 # COMMAND ----------
@@ -155,7 +155,7 @@ df_policies = policy.filter(
         'sa_code'
     ).repartition('pol_num').dropDuplicates()
 
-print("Number of records and columns in df_policies: ", df_policies.count(),",", len(df_policies.columns))
+#print("Number of records and columns in df_policies: ", df_policies.count(),",", len(df_policies.columns))
 # df_policies.display(10)
 
 # COMMAND ----------
@@ -197,7 +197,7 @@ df_coverage = coverage.filter(
         concat_ws('-',col('plan_code'),col('vers_num')).alias('plan_key')
     ).repartition('pol_num', 'cvg_eff_dt')
 
-print("Number of records and columns in df_coverage: ", df_coverage.count(),",", len(df_coverage.columns))
+#print("Number of records and columns in df_coverage: ", df_coverage.count(),",", len(df_coverage.columns))
 # df_coverage.display(10)
 
 # COMMAND ----------
@@ -226,7 +226,7 @@ df_coverage_iss = coverage_iss.filter(
         concat_ws('-',col('plan_code'),col('vers_num')).alias('plan_key')
     ).repartition('pol_num', 'cvg_eff_dt')
 
-print("Number of records and columns in df_coverage_iss: ", df_coverage_iss.count(),",", len(df_coverage_iss.columns))
+#print("Number of records and columns in df_coverage_iss: ", df_coverage_iss.count(),",", len(df_coverage_iss.columns))
 # df_coverage_iss.display(10)
 
 # COMMAND ----------
@@ -243,7 +243,7 @@ df_plan = plan.select(
     concat_ws('-', col('plan_code'), col('vers_num')).alias('plan_key')
 )
 
-print("Number of records and columns in df_plan: ", df_plan.count(),",", len(df_plan.columns))
+#print("Number of records and columns in df_plan: ", df_plan.count(),",", len(df_plan.columns))
 
 # COMMAND ----------
 

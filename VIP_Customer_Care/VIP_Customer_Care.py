@@ -17,6 +17,7 @@ import pyspark.sql.functions as F
 from pyspark.sql.window import Window
 from datetime import datetime, timedelta
 import calendar
+import pandas as pd
 
 # COMMAND ----------
 
@@ -25,11 +26,11 @@ import calendar
 
 # COMMAND ----------
 
-dm_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_DATAMART_DB/'
-cas_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/'
-alt_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_ANALYTICS_DB/'
-pos_path = 'abfss://prod@abcmfcadovnedl01psea.dfs.core.windows.net/Curated/VN/Master/VN_CURATED_REPORTS_DB/'
-lab_path = 'abfss://lab@abcmfcadovnedl01psea.dfs.core.windows.net/vn/project/'
+dm_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_DATAMART_DB/'
+cas_path = '/mnt/prod/Published/VN/Master/VN_PUBLISHED_CASM_CAS_SNAPSHOT_DB/'
+alt_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_ANALYTICS_DB/'
+pos_path = '/mnt/prod/Curated/VN/Master/VN_CURATED_REPORTS_DB/'
+lab_path = '/mnt/lab/vn/project/'
 
 tbl_src1 = 'TCUSTDM_daily/'
 tbl_src2 = 'TPOLIDM_MTHEND/'
@@ -47,20 +48,25 @@ abfss_paths = [dm_path,cas_path,alt_path,pos_path]
 parquet_files = [tbl_src1,tbl_src2,tbl_src3,tbl_src4,tbl_src5,
                  tbl_src6,tbl_src7,tbl_src8,tbl_src9,tbl_src10]
 
-x = 1 # Change to number of months ago (0: last month-end, 1: last last month-end, ...)
-today = datetime.now()
-first_day_of_current_month = today.replace(day=1)
-current_month = first_day_of_current_month
+# Set the number of months going backward
+x = 1  # Replace 0 with the desired number of months (0 being the last month-end)
+y = 12 # Number of months to be captured
 
-for i in range(x):
-    first_day_of_previous_month = current_month - timedelta(days=1)
-    first_day_of_previous_month = first_day_of_previous_month.replace(day=1)
-    current_month = first_day_of_previous_month
+# Calculate the last month-end
+current_date = pd.Timestamp.now()
+last_monthend = current_date - pd.DateOffset(days=current_date.day)
+last_monthend = last_monthend - pd.DateOffset(months=x)
+last_monthend = last_monthend + pd.offsets.MonthEnd(0)
+max_date_str = last_monthend.strftime('%Y-%m-%d')
 
-last_day_of_x_months_ago = current_month - timedelta(days=1)
-last_mthend = last_day_of_x_months_ago.strftime('%Y-%m-%d')
-start_mthend = datetime(2023, 1, 31).strftime('%Y-%m-%d')
-print(start_mthend, last_mthend)
+# Calculate the last 12 months month-end
+last_12m_monthend = last_monthend - pd.DateOffset(months=y)
+last_12m_monthend = last_12m_monthend + pd.offsets.MonthEnd(0)
+min_date_str = last_12m_monthend.strftime('%Y-%m-%d')
+
+yyyymm_max = max_date_str[:4] + max_date_str[5:7]
+yyyymm_min = min_date_str[:4] + min_date_str[5:7]
+print(f"From: {min_date_str} to: {max_date_str}, yyyymm_min: {yyyymm_min}, yyyymm_max: {yyyymm_max}")
 
 # COMMAND ----------
 
@@ -86,7 +92,7 @@ list_df['TPOLIDM_MTHEND'] = list_df['TPOLIDM_MTHEND']\
             .withColumn('prev_due_lag2', F.when(F.col('pmt_mode') =='12', F.add_months(F.col('pd_to_dt'),-24))
                                      .when(F.col('pmt_mode') =='01',F.add_months(F.col('pd_to_dt'),-2))
                                      .when(F.col('pmt_mode') =='03',F.add_months(F.col('pd_to_dt'),-6))
-                                     .when(F.col('pmt_mode') =='06',F.add_months(F.col('pd_to_dt'),-12)))
+                                     .when(F.col('pmt_mode') =='06',F.add_months(F.col('pd_to_dt'),-12)))            
 
 # COMMAND ----------
 
@@ -111,7 +117,7 @@ select distinct
 from    tclient_addresses b left join
         tprovinces c on substr(b.zip_code,1,2) = c.prov_id and b.image_date = c.image_date
 where   1=1
-    and b.image_date = '{last_mthend}'
+    and b.image_date = '{max_date_str}'
     and c.prov_nm not in ('nan','city','Xem Đơn YCBH','City')                         
 """
 
@@ -141,7 +147,7 @@ from 	tpolidm_mthend pol inner join
 where	pol.pol_stat_cd in ('1','2','3','6','8')		-- Select only Premium-paying OR Pending policies
 	and nvl(cus.city, alt.prov_nm) is not null
     and pol.tot_ape>0
-    and image_date between '2022-05-31' and '{last_mthend}'
+    and image_date between '{min_date_str}' and '{max_date_str}'
 """
 
 cus_ape_raw_DF = sql_to_df(sql_string, 1, spark)
@@ -170,7 +176,7 @@ cus_ape_DF = cus_ape_raw_DF.groupBy(['image_date', 'po_num', 'cus_city'])\
 
 cus_ape_DF = cus_ape_DF\
     .withColumn('vip_seg', 
-                F.when(F.col('tot_ape')>=300000, "1. Elite")
+                F.when(F.col('tot_ape')>=300000, "1. Diamond")
                 .when((F.col('tot_ape')>=150000) & (F.col('tot_ape')<300000), "2. Platinum")
                 .when((F.col('tot_ape')>=65000) & (F.col('tot_ape')<150000), "3. Gold")
                 .when((F.col('tot_ape')>=20000) & (F.col('tot_ape')<65000) & (F.col('10yr_pol_cnt')>=1), "4. Non-Tier")
@@ -188,14 +194,23 @@ cus_ape_DF = cus_ape_DF\
                 .otherwise('9. >300M')
     )
 
+#cus_ape_DF.groupBy("image_date")\
+#    .agg(
+#        F.count(F.col("po_num")).alias("po_count")
+#    ).orderBy(F.desc("image_date")).display()
+
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <strong>Prepare for additional features</strong>
+# MAGIC ###Prepare for additional features
 
 # COMMAND ----------
 
-# DBTITLE 1,Claims after 2 years onboarding
+# MAGIC %md
+# MAGIC <strong><i>Claims after 2 years onboard</strong>
+
+# COMMAND ----------
+
 # Get latest claim details
 sql_string = """
 select  po_num,
@@ -205,8 +220,8 @@ select  po_num,
 from    tclaim_details clm inner join
         tpolidm_mthend pol on clm.pol_num=pol.pol_num and clm.image_date=pol.image_date
 where   clm_stat_code in ('A')
-    and clm_code in ('3','7','8','11','27','28','29')
-    and clm.image_date = '{last_mthend}'
+    and clm_code in (3,7,11,27,28,29,36,38,50,51)
+    and clm.image_date = '{max_date_str}'
 """
 
 claim_details = sql_to_df(sql_string, 1, spark)
@@ -214,7 +229,11 @@ claim_details = sql_to_df(sql_string, 1, spark)
 
 # COMMAND ----------
 
-# DBTITLE 1,Onboarding and subsequent policies
+# MAGIC %md
+# MAGIC <strong><i>Onboarding and subsequent policies</strong>
+
+# COMMAND ----------
+
 # Get latest coverage details
 sql_string = """
 select  distinct
@@ -223,7 +242,7 @@ select  distinct
 from    tporidm_mthend cvg inner join
         tcoverages ins on cvg.pol_num=ins.pol_num and cvg.plan_code=ins.plan_code and 
         cvg.vers_num=ins.vers_num and cvg.cvg_typ=ins.cvg_typ
-where   cvg.image_date='{last_mthend}'
+where   cvg.image_date='{max_date_str}'
     and cvg.plan_code not like 'EV%'
     and cvg.cvg_prem > 0 -- Exclude those already matured or no APE record retained
 """
@@ -232,7 +251,7 @@ coverage_details = sql_to_df(sql_string, 1, spark)
 
 # Rank coverages by their effective dates
 ranked_pol = coverage_details.alias('cvg')\
-        .filter((F.col('cvg_stat_cd').isin(['6','8','A','N','R','X'])==False) & (F.col('cvg_eff_dt') <= last_mthend))\
+        .filter((F.col('cvg_stat_cd').isin(['6','8','A','N','R','X'])==False) & (F.col('cvg_eff_dt') <= max_date_str))\
         .join(list_df['TPOLIDM_MTHEND'].alias('pol'), on=['pol_num', 'image_date'], how='inner')\
         .withColumn('pol_rank', F.dense_rank().over(Window.partitionBy('po_num').orderBy(F.col('pol_eff_dt').asc())))\
         .select('pol.po_num',
@@ -265,42 +284,127 @@ additional_pol = ranked_pol.filter(F.col('pol_rank')>1)
 # COMMAND ----------
 
 # Merge the two dataframes
-cus_ape_all = first_cus.join(
-    additional_pol,
-    on='po_num',
-    how='left').join(
-    claim_details,
-    on='po_num',
-    how='left'
-    )
+cus_ape_tmp = first_cus.join(
+    additional_pol, on='po_num', how='left').join(
+    claim_details,  on='po_num', how='left')
 
-cus_ape_all.createOrReplaceTempView('cus_ape_all')
+#cus_ape_tmp.createOrReplaceTempView('cus_ape_all')
 
 # COMMAND ----------
 
-# Derive the additional statistical fields
+# Define a function to calculate the year difference
+def calculate_year_difference(date1, date2):
+    return F.floor(F.datediff(date1, date2) / 365.25)
+
+# Apply the function to the DataFrame
+cus_ape_tmp = cus_ape_tmp.withColumn("year_diff_pol", calculate_year_difference(cus_ape_tmp["pol_eff_dt"], cus_ape_tmp["frst_eff_dt"])) \
+                         .withColumn("year_diff_cvg", calculate_year_difference(cus_ape_tmp["cvg_eff_dt"], cus_ape_tmp["frst_eff_dt"])) \
+                         .withColumn("year_diff_clm", calculate_year_difference(cus_ape_tmp["clm_eff_dt"], cus_ape_tmp["frst_eff_dt"]))
+
+# Apply the optimized SQL query
+cus_ape_tmp.createOrReplaceTempView("cus_ape_temp")
 sql_string = """
-select  po_num, no_pol_count, frst_eff_dt, substr(frst_eff_dt,1,7) as frst_rpt_mth, frst_eff_yr, frst_ape,
-        count(distinct case when floor(datediff(pol_eff_dt, frst_eff_dt)/365.25) <= 2 and cvg_typ='B' then pol_num end)
-        as new_pol_next_2yr,
-        sum(case when floor(datediff(pol_eff_dt, frst_eff_dt)/365.25) <= 2 and cvg_typ='B' then ape else 0 end)
-        as new_pol_ape_next_2yr,
-        count(case when floor(datediff(cvg_eff_dt, frst_eff_dt)/365.25) <= 2 and cvg_typ<>'B' then pol_num end)
-        as new_rider_next_2yr,
-        sum(case when floor(datediff(cvg_eff_dt, frst_eff_dt)/365.25) <= 2 and cvg_typ<>'B' then ape else 0 end)
-        as new_rider_ape_next_2yr,
-        count(case when floor(datediff(clm_eff_dt, frst_eff_dt)/365.25) <= 2 then clm_id end)
-        as clm_next_2yr,
-        sum(case when floor(datediff(clm_eff_dt, frst_eff_dt)/365.25) <= 2 then clm_aprov_amt else 0 end)
-        as clm_amt_next_2yr
-from    cus_ape_all
-group by
-        po_num, no_pol_count, frst_eff_dt, frst_eff_yr, frst_ape
+SELECT
+    po_num,
+    no_pol_count,
+    frst_eff_dt,
+    substr(frst_eff_dt, 1, 7) AS frst_rpt_mth,
+    frst_eff_yr,
+    frst_ape,
+    COUNT(DISTINCT CASE WHEN datediff(pol_eff_dt,frst_eff_dt)>0 and cvg_typ='B' THEN pol_num END) AS new_pol,
+    SUM(DISTINCT CASE WHEN datediff(pol_eff_dt,frst_eff_dt)>0 and cvg_typ='B' THEN ape else 0 END) AS new_pol_ape,
+    COUNT(DISTINCT CASE WHEN year_diff_pol <= 2 AND cvg_typ='B' THEN pol_num END) AS new_pol_next_2yr,
+    COUNT(DISTINCT CASE WHEN year_diff_pol > 2 AND cvg_typ='B' THEN pol_num END) AS new_pol_after_2yr,
+    SUM(CASE WHEN year_diff_pol <= 2 AND cvg_typ='B' THEN ape ELSE 0 END) AS new_pol_ape_next_2yr,
+    SUM(CASE WHEN year_diff_pol > 2 AND cvg_typ='B' THEN ape ELSE 0 END) AS new_pol_ape_after_2yr,
+    COUNT(CASE WHEN year_diff_cvg <= 2 AND cvg_typ<>'B' THEN pol_num END) AS new_rider_next_2yr,
+    COUNT(CASE WHEN year_diff_cvg > 2 AND cvg_typ<>'B' THEN pol_num END) AS new_rider_after_2yr,
+    SUM(CASE WHEN year_diff_cvg <= 2 AND cvg_typ<>'B' THEN ape ELSE 0 END) AS new_rider_ape_next_2yr,
+    SUM(CASE WHEN year_diff_cvg > 2 AND cvg_typ<>'B' THEN ape ELSE 0 END) AS new_rider_ape_after_2yr,
+    COUNT(CASE WHEN year_diff_clm <= 2 THEN clm_id END) AS clm_next_2yr,
+    SUM(CASE WHEN year_diff_clm <= 2 THEN clm_aprov_amt ELSE 0 END) AS clm_amt_next_2yr
+FROM
+    cus_ape_temp
+GROUP BY
+    po_num, no_pol_count, frst_eff_dt, frst_eff_yr, frst_ape
 """
 
 cus_ape_all = sql_to_df(sql_string, 0, spark)
 
-#print(cus_ape_all.count())
+# Add the "upsell_ind" and "upsell_base_ind" columns
+cus_ape_all = cus_ape_all.withColumn("upsell_ind", 
+    F.when((F.col("new_pol_next_2yr") > 0) | (F.col("new_pol_after_2yr") > 0) | (F.col("new_rider_next_2yr") > 0) | (F.col("new_rider_after_2yr") > 0), 1).otherwise(0)
+)
+
+cus_ape_all = cus_ape_all.withColumn("upsell_base_ind", 
+    F.when((F.col("new_pol_next_2yr") > 0) | (F.col("new_pol_after_2yr") > 0), 1).otherwise(0)
+)
+
+# Display all customers and those with upsell
+#cus_ape_all.agg(
+#        F.count(F.col("po_num")).alias("no_rows"),
+#        F.countDistinct(F.col("po_num")).alias("no_po"),
+#        F.sum(F.when(F.col("upsell_base_ind")==1, F.lit(1)).otherwise(0)).alias("no_po_upsell")
+#        ).display()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC <strong><i>Additional features</strong>
+
+# COMMAND ----------
+
+lapse = spark.read.option("header",True).csv("/mnt/lab/vn/project/analytics_datamart/Phu_Le_Quang_Data/mapping files/Data Persistency.csv")
+lapse_filtered = lapse.filter(F.col("Cvg_Status") == 'B')
+
+# Define a UDF to extract the year from the yyyymm integer value
+extract_year = F.udf(lambda x: int(str(x)[:4]) if x != 0 else 0)
+
+lapse_filtered = lapse_filtered.withColumn("lapse_year", 
+                                           F.greatest(extract_year("Reporting_Period_M4"),
+                                                      extract_year("Reporting_Period_M13"), 
+                                                      extract_year("Reporting_Period_M25"), 
+                                                      extract_year("Reporting_Period_M37")))\
+                               .withColumn("IF_duration_year", F.floor(F.col("IF_duration")/12))
+
+# Group persistency policies by Client level
+lapse_sum = lapse_filtered.groupBy("Client_number")\
+    .agg(
+        F.count(F.col("Policy_number")).alias("no_lapse_pols"),
+        F.min(F.year(F.col("cvg_eff_dt"))).alias("eff_yr"),
+        F.max(F.col("IF_duration")).alias("inf_mth"),
+        F.max(F.col("IF_duration_year")).alias("inf_yr"),
+        F.sum(F.col("APE")).alias("lapsed_ape"),
+        F.max(F.col("Product_Group_Base_1")).alias("lapsed_prd"),
+        F.max(F.col("lapse_year")).alias("lapse_yr")
+    )
+    
+# Add the categorical columns to the "lapse_sum" DataFrame
+lapse_sum = lapse_sum.withColumn("lapse_yr_tier", 
+    F.when(F.col("inf_yr") <= 1, "PY1")
+    .when((F.col("inf_yr") > 1) & (F.col("inf_yr") <= 2), "PY2")
+    .when((F.col("inf_yr") > 2) & (F.col("inf_yr") <= 3), "PY3")
+    .otherwise("PY4+")
+)
+
+lapse_sum = lapse_sum.withColumn("lapse_pol_tier",
+    F.when(F.col("no_lapse_pols") < 2, "1 lapsed pol")
+    .when((F.col("no_lapse_pols") >= 2) & (F.col("no_lapse_pols") < 3), "2 lapsed pols")
+    .otherwise("3+ lapse pols")
+)
+
+lapse_sum = lapse_sum.withColumn("lapse_ape_tier",
+    F.when(F.col('lapsed_ape') < 25000, '1. <25M')
+    .when((F.col('lapsed_ape') >= 25000) & (F.col('lapsed_ape') < 50000), '2. 25-50M')
+    .when((F.col('lapsed_ape') >= 50000) & (F.col('lapsed_ape') < 65000), '3. 50-65M')
+    .when((F.col('lapsed_ape') >= 65000) & (F.col('lapsed_ape') < 75000), '4. 65-75M')
+    .when((F.col('lapsed_ape') >= 75000) & (F.col('lapsed_ape') < 85000), '5. 75-85M')
+    .when((F.col('lapsed_ape') >= 85000) & (F.col('lapsed_ape') < 100000), '6. 85-100M')
+    .when((F.col('lapsed_ape') >= 100000) & (F.col('lapsed_ape') < 150000), '7. 100-150M')
+    .when((F.col('lapsed_ape') >= 150000) & (F.col('lapsed_ape') < 300000), '8. 150-300M')
+    .otherwise('9. >300M')
+)
+#lapse_sum.display()
 
 # COMMAND ----------
 
@@ -328,6 +432,17 @@ cus_ape_tier_DF = cus_ape_all\
                 .when((F.col('frst_ape')>=85000) & (F.col('frst_ape')<100000), '6. 85-100M')
                 .when((F.col('frst_ape')>=100000) & (F.col('frst_ape')<150000), '7. 100-150M')
                 .when((F.col('frst_ape')>=150000) & (F.col('frst_ape')<300000), '8. 150-300M')
+                .otherwise('9. >300M')
+    )\
+    .withColumn('new_pol_ape_tier',
+                F.when(F.col('new_pol_ape')<25000, '1. <25M')
+                .when((F.col('new_pol_ape')>=25000) & (F.col('new_pol_ape')<50000), '2. 25-50M')
+                .when((F.col('new_pol_ape')>=50000) & (F.col('new_pol_ape')<65000), '3. 50-65M')
+                .when((F.col('new_pol_ape')>=65000) & (F.col('new_pol_ape')<75000), '4. 65-75M')
+                .when((F.col('new_pol_ape')>=75000) & (F.col('new_pol_ape')<85000), '5. 75-85M')
+                .when((F.col('new_pol_ape')>=85000) & (F.col('new_pol_ape')<100000), '6. 85-100M')
+                .when((F.col('new_pol_ape')>=100000) & (F.col('new_pol_ape')<150000), '7. 100-150M')
+                .when((F.col('new_pol_ape')>=150000) & (F.col('new_pol_ape')<300000), '8. 150-300M')
                 .otherwise('9. >300M')
     )\
     .withColumn('new_pol_next_2yr_tier',
@@ -430,9 +545,9 @@ select 	*
 			  else '6. No payment recorded within 60 days' end as payment1
 		--Indicators
 		,case when days_diff >= -60 and days_diff <-30   then 1 else 0 end as f_30_days_before_due
-		,case when days_diff >= -30 and days_diff <0   then 1 else 0 end as f_l30days_before_due
+		,case when days_diff >= -30 and days_diff <0   then 1 else 0 end as f_l30_days_before_due
 		,case when days_diff == 0 then 1 else 0 end as f_same_day_due
-		,case when days_diff >= 1 and days_diff <=30 then 1 else 0 end as f_l30_days_after_due
+		,case when days_diff >= 1 and days_diff <30 then 1 else 0 end as f_l30_days_after_due
 		,case when days_diff >= 30 then 1 else 0 end as f_30_days_after_due
 		,case when days_diff is null then 1 else 0 end as f_no_payment_rec_60_days
 from	base_pmt
@@ -442,13 +557,13 @@ base_pmt_ind_DF = sql_to_df(sql_string, 0, spark)
 #Create Indicators
 prem_payment_DF = base_pmt_ind_DF.groupby(['rpt_mth', 'po_num'])\
     .agg(F.max('f_30_days_before_due').alias('f_30_days_before_due'),
-         F.max('f_l30days_before_due').alias('f_l30days_before_due'),
+         F.max('f_l30_days_before_due').alias('f_l30_days_before_due'),
          F.max('f_same_day_due').alias('f_same_day_due'),
          F.max('f_l30_days_after_due').alias('f_l30_days_after_due'),
 		 F.max('f_30_days_after_due').alias('f_30_days_after_due'),
 		 F.max('f_no_payment_rec_60_days').alias('f_no_payment_rec_60_days'),
 		 F.countDistinct(F.when(F.col("payment1") == "f_30_days_before_due" ,F.col("pol_num"))).alias('k_30_days_before_due'),
-		 F.countDistinct(F.when(F.col("payment1") == "f_l30days_before_due" ,F.col("pol_num"))).alias('k_l30days_before_due'),
+		 F.countDistinct(F.when(F.col("payment1") == "f_l30_days_before_due" ,F.col("pol_num"))).alias('k_l30_days_before_due'),
 		 F.countDistinct(F.when(F.col("payment1") == "f_same_day_due" ,F.col("pol_num"))).alias('k_same_day_due'),
 		 F.countDistinct(F.when(F.col("payment1") == "f_l30_days_after_due" ,F.col("pol_num"))).alias('k_l30_days_after_due'),
 		 F.countDistinct(F.when(F.col("payment1") == "f_30_days_after_due" ,F.col("pol_num"))).alias('k_30_days_after_due'),
@@ -464,7 +579,7 @@ spark.read.parquet('/mnt/prod/Published/VN/Master/VN_PUBLISHED_AMS_DB/TAMS_AGENT
 spark.read.parquet('/mnt/prod/Staging/Incremental/VN_PUBLISHED_CAMPAIGN_FILEBASED_DB/NBV_MARGIN_HISTORIES/').createOrReplaceTempView('nbv_margin_histories')
 spark.read.parquet('/mnt/prod/Curated/VN/Master/VN_CURATED_CAMPAIGN_DB/VN_PLAN_CODE_MAP/').createOrReplaceTempView('vn_plan_code_map')
 
-newSales2023_df = spark.sql("""
+newSales_df = spark.sql(f"""
 select	tb2.cli_num,
         tb1.pol_num,
         tb1.plan_code_base,
@@ -498,20 +613,16 @@ where   tb1.plan_code_base not in ('FDB01','BIC01','BIC02','BIC03','BIC04','PN00
     and tb2.link_typ = 'O'
     and tb2.rec_status='A'
     and tb1.pol_stat_cd not in ('6','8','A','N','R','X')
-    and year(tb1.pol_iss_dt)=year('{last_mthend}')
+    and year(tb1.pol_iss_dt)=year('{max_date_str}')
 """)
 
-custSales2023_df = newSales2023_df.groupBy('cli_num')\
+custSales_df = newSales_df.groupBy('cli_num')\
     .agg(
         F.count(F.col('pol_num')).cast('Int').alias('no_cc'),
         F.sum(F.col('APE_Upsell')).cast('double').alias('APE_Upsell'),
         F.sum(F.col('NBV_Upsell')).alias('NBV_Upsell')
     )\
     .withColumn('newSale_ind', F.lit('Y'))
-
-# COMMAND ----------
-
-#display(custSales2023_df)
 
 # COMMAND ----------
 
@@ -529,8 +640,9 @@ cus_ape_DF.createOrReplaceTempView('vip_customers')
 vip_move_DF.createOrReplaceTempView('vip_move')
 prem_payment_DF.createOrReplaceTempView('prem_payment')
 cus_ape_tier_DF.createOrReplaceTempView('cus_ape_tier')
+lapse_sum.createOrReplaceTempView('lapse_sum')
 channelDF.createOrReplaceTempView('customers_table_mthly')
-custSales2023_df.createOrReplaceTempView('cust_sale_2023')
+custSales_df.createOrReplaceTempView('cust_sale')
 
 sql_string = """
 select  substr(vip.image_date,1,7) as rpt_mth,
@@ -545,12 +657,12 @@ select  substr(vip.image_date,1,7) as rpt_mth,
              then vip.cus_city
              else 'Khác'
         end city_seg,
-        f_new_pur_12m,
-        f_lapsed_12m,
-        f_clm_cnt_12m,
-        a_total_clm_amt_12m,
+        --f_new_pur_12m,
+        --f_lapsed_12m,
+        --f_clm_cnt_12m,
+        --a_total_clm_amt_12m,
         nvl(f_30_days_before_due,0) as f_30_days_before_due,
-        nvl(f_l30days_before_due,0) as f_l30days_before_due,
+        nvl(f_l30_days_before_due,0) as f_l30_days_before_due,
         nvl(f_same_day_due,0) as f_same_day_due,
         nvl(f_l30_days_after_due,0) as f_l30_days_after_due,
         nvl(f_30_days_after_due,0) as f_30_days_after_due,
@@ -560,6 +672,8 @@ select  substr(vip.image_date,1,7) as rpt_mth,
         onb_yr_tier,
         frst_ape,
         onb_ape_tier,
+        nvl(new_pol_ape,0) new_pol_ape,
+        new_pol_ape_tier,
         new_pol_next_2yr,
         new_pol_next_2yr_tier,
         new_pol_ape_next_2yr,
@@ -575,18 +689,24 @@ select  substr(vip.image_date,1,7) as rpt_mth,
         case when chnl.channel not in ('Agency','Banca') then 'Other' else chnl.channel end as channel,
         case when vip.vip_seg <> '4. Non-Tier' then 1 else 0
         end as target,
-        nvl(newsale_ind,'N') as newsale_ind,
-        nvl(no_cc,0) as no_cc,
+        nvl(upsell_ind,0) as upsell_ind,
+        nvl(upsell_base_ind,0) as upsell_base_ind,
+        nvl(lapsed_ape,0) as lapsed_ape,
+        nvl(lapse_yr_tier,'No Lapse') as lapse_yr_tier,
+        nvl(lapse_pol_tier,0) as lapse_pol_tier,
+        nvl(lapse_ape_tier,'1. <25M') as lapse_ape_tier
+        /*nvl(no_cc,0) as no_cc,
         nvl(APE_UpSell,0) as ape_upsell,
-        nvl(NBV_UpSell,0) as nbv_upsell
+        nvl(NBV_UpSell,0) as nbv_upsell*/
 from    vip_customers vip left join
         vip_move old_vip on vip.po_num=old_vip.po_num and vip.image_date=old_vip.image_date left join
         cus_rfm rfm on vip.po_num=rfm.po_num and substr(vip.image_date,1,7)=rfm.monthend_dt left join
         prem_payment prem on vip.po_num=prem.po_num and substr(vip.image_date,1,7)=prem.rpt_mth left join
         cus_ape_tier ape on vip.po_num=ape.po_num left join
-        customers_table_mthly chnl on vip.po_num=chnl.po_num and vip.image_date=chnl.reporting_date left join
-        cust_sale_2023 nsale on vip.po_num=nsale.cli_num
-where   substr(vip.image_date,1,7)>=substr('{last_mthend}',1,7) --'2022-12'
+        lapse_sum lps on vip.po_num=lps.Client_number left join
+        customers_table_mthly chnl on vip.po_num=chnl.po_num and vip.image_date=chnl.reporting_date --left join
+        --cust_sale nsale on vip.po_num=nsale.cli_num
+where   substr(vip.image_date,1,7)>=substr('{max_date_str}',1,7) --'2022-12'
 """
 
 cus_all_raw_DF = sql_to_df(sql_string, 1, spark)
@@ -596,35 +716,35 @@ nonvip_cus_raw_DF = cus_all_raw_DF.filter(F.col('vip_seg') == '4. Non-Tier')
 #vip_cus_raw_DF.count()
 #vip_cus_raw_DF.limit(50).display()
 
-cus_all_raw_DF.groupBy(['target', 'vip_seg'])\
-        .agg(
-                F.count(F.col('po_num')).alias('no_cus')
-        ).orderBy('vip_seg').display()
+vip_cus_raw_DF.groupBy("vip_seg")\
+        .agg(F.count(F.col("po_num")).alias("no_cus"))\
+        .orderBy("vip_seg")\
+        .display()
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC <strong> Get top 100 VIP by APE</strong>
+# MAGIC <strong> Store everything</strong>
 
 # COMMAND ----------
 
 #vip_cus_raw_DF.orderBy(F.desc('tot_ape')).limit(100).display()
 
-vip_cus_raw_DF.write.mode('overwrite').option('partitionOverwriteMode', 'dynamic').partitionBy('rpt_mth').parquet('/mnt/lab/vn/project/cpm/Adhoc/VIP_VIP_Customer_Care/')
+cus_all_raw_DF.coalesce(1).write.mode('overwrite').option('partitionOverwriteMode', 'dynamic').partitionBy('rpt_mth').parquet('/mnt/lab/vn/project/cpm/Adhoc/VIP_Customer_Care/')
 
 # COMMAND ----------
 
-cus_all_raw_DF.groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_ind', 'current_ape_tier', 'onb_yr_tier', 'f_onb_same_mth',
-                        'new_pol_next_2yr_tier', 'new_rider_next_2yr_tier', 'f_2yr_pol', 'f_lapsed_12m',
-                        'f_30_days_after_due',
-                        ])\
-    .agg(
-        F.countDistinct(F.col('po_num')).alias('no_vip_cus')
-    )\
-    .where(
-        (F.col('channel').isNotNull()) &
-        (F.col('vip_seg').isNotNull())
-    ).display()
+#cus_all_raw_DF.groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_ind', 'current_ape_tier', 'onb_yr_tier', 'f_onb_same_mth',
+#                        'new_pol_next_2yr_tier', 'new_rider_next_2yr_tier', 'f_2yr_pol', 'f_lapsed_12m',
+#                        'f_30_days_after_due',
+#                        ])\
+#    .agg(
+#        F.countDistinct(F.col('po_num')).alias('no_vip_cus')
+#    )\
+#    .where(
+#        (F.col('channel').isNotNull()) &
+#        (F.col('vip_seg').isNotNull())
+#    ).display()
 
 # COMMAND ----------
 
@@ -633,32 +753,22 @@ cus_all_raw_DF.groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_ind', 'curren
 
 # COMMAND ----------
 
-cus_all_DF = cus_all_raw_DF.groupBy(['rpt_mth', 'target', 'newsale_ind',
-                                     ])\
-    .agg(
-        F.countDistinct(F.col('po_num')).alias('no_cus'),
-        F.when(F.col('newsale_ind')=='Y', F.countDistinct(F.col('po_num'))).otherwise(F.lit(0)).alias('no_cus_newsale'),
-        F.sum(F.col('tot_ape')).alias('total_ape'),
-        F.when(F.col('newsale_ind')=='Y', F.sum(F.col('ape_upsell'))).otherwise(F.lit(0)).alias('ape_newsale'),
-    )
-
-cus_all_DF.display()
-
-# COMMAND ----------
-
-vip_cus_DF = vip_cus_raw_DF.groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_ind', 'current_ape_tier', 'onb_yr_tier', 'onb_ape_tier',
-                                     'new_pol_next_2yr_tier', 'new_pol_ape_next_2yr_tier', 'new_rider_next_2yr_tier', 'new_rider_ape_next_2yr_tier',
-                                     'f_2yr_pol', 'f_lapsed_12m', 'f_30_days_after_due',
-                                     ])\
-    .agg(
-        F.countDistinct(F.col('po_num')).alias('no_vip_cus')
-    )\
-    .where(
+vip_cus_pd = vip_cus_raw_DF\
+    .filter(
         (F.col('channel').isNotNull()) &
-        (F.col('vip_seg').isNotNull())
-    )
+        (F.col('vip_seg').isNotNull()))\
+    .groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_ind', 'current_ape_tier', 'onb_yr_tier', 'onb_ape_tier',
+               'upsell_ind', 'upsell_base_ind', 'new_pol_ape_tier', 'new_pol_ape_next_2yr_tier', 'lapse_yr_tier',
+               'lapse_pol_tier', 'lapse_ape_tier'
+               ])\
+    .agg(
+        F.countDistinct(F.col("po_num")).alias("no_vip_cus"),
+        F.sum(F.col("new_pol_ape")/1000).alias("upsell_ape_mVND"),
+        F.sum(F.col("lapsed_ape")/1000).alias("lapsed_ape_mVND"),
+        F.sum(F.col("tot_ape")/1000).alias("total_ape_mVND"))\
+    .toPandas()
 
-#vip_cus_DF.display()
+#display(vip_cus_pd)
 
 # COMMAND ----------
 
@@ -667,7 +777,4 @@ vip_cus_DF = vip_cus_raw_DF.groupBy(['rpt_mth', 'channel', 'vip_seg', 'vip_move_
 
 # COMMAND ----------
 
-#from sklearn.model_selection import train_test_split
-#from sklearn.preprocessing import LabelEncoder
-#from sklearn.ensemble import RandomForestClassifier
-#import pandas as pd
+vip_cus_pd.to_csv('/dbfs/mnt/lab/vn/project/cpm/Adhoc/VIP_Customer_Care.csv', index=False, header=True)
